@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Редактор плат SV005 – ручное назначение клемм</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            background: #e9eef3;
+            margin: 0;
+            padding: 14px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 24px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+            padding: 20px;
+        }
+        h1 {
+            font-size: 1.5rem;
+            color: #1e4663;
+            margin: 0 0 10px 0;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #bdd4e7;
+        }
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: flex-end;
+            margin: 12px 0 18px;
+            background: #f8fafc;
+            padding: 12px 16px;
+            border-radius: 18px;
+        }
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .field label {
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        .field input, .field select {
+            padding: 5px 10px;
+            border-radius: 14px;
+            border: 1px solid #cbd5e1;
+            font-size: 0.85rem;
+            background: white;
+            height: 32px;
+        }
+        .field input[type="number"] {
+            width: 70px;
+        }
+        button {
+            background: #1e3c72;
+            border: none;
+            padding: 6px 16px;
+            border-radius: 30px;
+            color: white;
+            font-weight: bold;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: 0.2s;
+            height: 32px;
+            line-height: 1;
+            white-space: nowrap;
+        }
+        button:hover {
+            background: #0f2b4f;
+            transform: translateY(-1px);
+        }
+        .btn-danger {
+            background: #b91c1c;
+        }
+        .btn-danger:hover {
+            background: #7f1a1a;
+        }
+        .btn-success {
+            background: #2b6e3c;
+        }
+        .btn-secondary {
+            background: #4b5563;
+        }
+        .btn-secondary:hover {
+            background: #374151;
+        }
+        .btn-submit {
+            background: #2b6e3c;
+            font-size: 0.85rem;
+            padding: 6px 20px;
+            height: 34px;
+        }
+        .btn-submit:hover {
+            background: #1e4f2c;
+        }
+        .board-card {
+            background: #ffffff;
+            border: 1px solid #c0d4e8;
+            border-radius: 20px;
+            margin: 18px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            overflow: hidden;
+        }
+        .board-header {
+            background: #1e4663;
+            color: white;
+            padding: 8px 18px;
+            font-weight: bold;
+            font-size: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .board-header button {
+            background: transparent;
+            padding: 0 8px;
+            height: 28px;
+            font-size: 1rem;
+        }
+        .board-params {
+            padding: 10px 18px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            background: #f0f6fe;
+            border-bottom: 1px solid #c0d4e8;
+        }
+        .board-param {
+            flex: 1;
+            min-width: 120px;
+        }
+        .board-param label {
+            font-size: 0.6rem;
+            text-transform: uppercase;
+            font-weight: 600;
+            color: #2c5282;
+            display: block;
+        }
+        .board-param input {
+            width: 100%;
+            padding: 4px 8px;
+            border-radius: 14px;
+            border: 1px solid #bdd4e7;
+            margin-top: 2px;
+            font-size: 0.85rem;
+            height: 28px;
+        }
+        .plinth-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding: 12px;
+        }
+        .plinth-card {
+            background: #fafcff;
+            border: 1px solid #dce5f0;
+            border-radius: 18px;
+            overflow: hidden;
+        }
+        .plinth-header {
+            background: #eef3fc;
+            padding: 6px 14px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            border-bottom: 1px solid #d0dfef;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .plinth-params {
+            padding: 8px 14px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            background: #ffffff;
+            border-bottom: 1px solid #e2edf7;
+        }
+        .plinth-param {
+            flex: 1;
+            min-width: 90px;
+        }
+        .plinth-param label {
+            font-size: 0.55rem;
+            font-weight: 600;
+            color: #4a627a;
+            display: block;
+            text-transform: uppercase;
+        }
+        .plinth-param input {
+            width: 100%;
+            padding: 3px 8px;
+            border-radius: 12px;
+            border: 1px solid #cfdfed;
+            background: #fef9e6;
+            font-size: 0.8rem;
+            height: 26px;
+        }
+        .terminal-row {
+            background: #fdfdf5;
+            border-radius: 16px;
+            padding: 8px 10px;
+            margin: 0 14px 14px 14px;
+            border: 1px solid #e0e9f2;
+        }
+        .terminals {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 6px;
+        }
+        .terminal {
+            flex: 1 1 60px;
+            min-width: 55px;
+            background: #f4f7fd;
+            border-radius: 12px;
+            padding: 4px 3px;
+            text-align: center;
+        }
+        .terminal-num {
+            font-weight: bold;
+            font-family: monospace;
+            font-size: 0.75rem;
+            background: #2c3e50;
+            color: white;
+            display: inline-block;
+            width: 24px;
+            line-height: 24px;
+            border-radius: 24px;
+            margin-bottom: 3px;
+        }
+        .terminal select {
+            width: 100%;
+            padding: 2px 4px;
+            border-radius: 12px;
+            font-size: 0.6rem;
+            height: 22px;
+            border: 1px solid #ccc;
+        }
+        .terminal-legend {
+            font-size: 0.5rem;
+            color: #6f7885;
+            margin-top: 2px;
+        }
+        .cable-numbers {
+            background: #f0f6fe;
+            padding: 8px 14px;
+            margin: 0 14px 14px 14px;
+            border-radius: 16px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: space-between;
+        }
+        .cable-field {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 80px;
+        }
+        .cable-field label {
+            font-size: 0.55rem;
+            font-weight: 600;
+            color: #2c5282;
+        }
+        .cable-field input {
+            padding: 3px 6px;
+            border-radius: 12px;
+            border: 1px solid #bdd4e7;
+            width: 90px;
+            font-size: 0.75rem;
+            height: 24px;
+        }
+        .btn-copy {
+            background: #4b5563;
+            margin-left: auto;
+            font-size: 0.7rem;
+            padding: 4px 12px;
+            height: 26px;
+        }
+        .btn-copy:hover {
+            background: #374151;
+        }
+        .board-content {
+            transition: all 0.2s;
+        }
+        .info-note {
+            font-size: 0.7rem;
+            text-align: center;
+            color: #5b6e8c;
+            margin-top: 12px;
+        }
+        .error { background: #fee2e2; color: #b91c1c; padding: 8px 16px; border-radius: 16px; margin: 10px 0; font-size: 0.85rem; }
+        .success { background: #dcfce7; color: #15803d; padding: 8px 16px; border-radius: 16px; font-size: 0.85rem; }
+        .toolbar .btn-submit {
+            margin-left: auto;
+        }
+        #message {
+            min-height: 36px;
+        }
+        .field input[type="text"] { width: auto; min-width: 120px; }
+        .field select { min-width: 100px; }
+        .board-param input { min-width: 80px; }
+        .preset-select {
+            font-size: 0.75rem;
+            padding: 2px 6px;
+            border-radius: 12px;
+            border: 1px solid #b0c4d8;
+            background: white;
+            height: 26px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🔌 Редактор плат SV005 (ручное назначение клемм + кабели)</h1>
+    <div class="toolbar">
+        <div class="field">
+            <label>📍 Адрес</label>
+            <input type="text" id="address" placeholder="" value="">
+        </div>
+        <div class="field">
+            <label>🎛 Модель</label>
+            <select id="globalModelSelect">
+                <option value="SV 777">SV 777</option>
+                <option value="SV 720">SV 720</option>
+                <option value="xDT32">xDT32</option>
+            </select>
+        </div>
+        <div class="field">
+            <label>🏠 Помещение (общее)</label>
+            <input type="text" id="globalRoom" placeholder="305" style="width:100px;">
+        </div>
+        <div class="field">
+            <label>Кол-во плат</label>
+            <input type="number" id="numBoards" value="1" min="1" style="width:70px;">
+        </div>
+        <button type="button" id="createMultipleBtn" class="btn-success">➕ Создать N плат</button>
+        <button type="button" id="addBoardBtn" class="btn-secondary">➕ Плата</button>
+        <button type="button" id="fillTestBtn" class="btn-secondary">🧪 Тест</button>
+        <button type="button" id="applyGlobalRoomBtn" class="btn-secondary">🏠 Применить ко всем</button>
+        <button type="button" id="submitExcelTopBtn" class="btn-submit">📎 Сформировать Excel</button>
+    </div>
+    <div id="boardsContainer"></div>
+    <div style="text-align: center; margin: 12px 0;">
+        <button id="submitExcelBtn" class="btn-submit" style="font-size:1rem; padding:8px 32px; height:38px;">📎 Сформировать Excel</button>
+    </div>
+    <div id="message"></div>
+    <div class="info-note">
+        ▼ Каждая плата имеет два плинта: R1/D1 (вход) и R2/D2 (выход).<br>
+        • Выберите клемму (0-9) для каждого устройства.<br>
+        • Укажите номера кабелей для подключенных устройств.<br>
+        • СКУД для первого и второго плинтов могут различаться.<br>
+        • Кнопка "Копировать вход → выход" дублирует настройки.
+    </div>
+</div>
+
+<script>
+    const deviceOptions = [
+        { value: "", label: "не используется" },
+        { value: "reader", label: "📖 Счит." },
+        { value: "lock", label: "🔒 Замок" },
+        { value: "fire_lock", label: "🔥 Замок пож." },
+        { value: "contact", label: "🧲 Геркон" },
+        { value: "exit_btn", label: "🚪 Кн.Вых" },
+        { value: "siren", label: "🔊 Сирена" }
+    ];
+
+    // Пресеты (без изменений)
+    const presets = {
+        '': [],
+        'reader_button': [
+            { terminal: 0, device: 'reader' },
+            { terminal: 1, device: 'reader' },
+            { terminal: 2, device: 'reader' },
+            { terminal: 3, device: 'reader' },
+            { terminal: 4, device: 'lock' },
+            { terminal: 6, device: 'contact' },
+            { terminal: 7, device: 'exit_btn' }
+        ],
+        'reader_reader': [
+            { terminal: 0, device: 'reader' },
+            { terminal: 1, device: 'reader' },
+            { terminal: 2, device: 'reader' },
+            { terminal: 3, device: 'reader' },
+            { terminal: 4, device: 'lock' },
+            { terminal: 6, device: 'contact' }
+        ]
+    };
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, m => (m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;'));
+    }
+
+    function applyPreset(plinthDiv, presetKey) {
+        const selects = plinthDiv.querySelectorAll('.device-select');
+        selects.forEach(sel => sel.value = '');
+        const preset = presets[presetKey] || [];
+        preset.forEach(item => {
+            const terminal = item.terminal;
+            if (selects[terminal]) {
+                selects[terminal].value = item.device;
+            }
+        });
+    }
+
+    // ---------- НОВАЯ ФУНКЦИЯ ДЛЯ ФОРМИРОВАНИЯ ПЛИНТОДЕРЖАТЕЛЯ С ГРУППИРОВКОЙ ПО 15 ----------
+    function buildHolder(rack, plinthNumber) {
+        const rackClean = rack.replace(/^ХК\s*/i, '');
+        if (!rackClean) return '';
+        const absNum = parseInt(plinthNumber, 10);
+        const group = Math.floor((absNum - 1) / 15) + 1;
+        const local = ((absNum - 1) % 15) + 1;
+        return `ХВ-${rackClean}.${group}.${local}`;
+    }
+
+    function createPlinthElement(side, defaultData, skudValue) {
+        const plinthDiv = document.createElement('div');
+        plinthDiv.className = 'plinth-card';
+        plinthDiv.dataset.side = side;
+
+        const typeLabel = side === 'R1/D1' ? 'R1/D1 (вход)' : 'R2/D2 (выход)';
+        const header = document.createElement('div');
+        header.className = 'plinth-header';
+        header.innerHTML = `
+            <span>🔌 Плинт ${typeLabel}</span>
+            <div style="display:flex; gap:6px; align-items:center;">
+                <label style="font-size:0.7rem; font-weight:normal;">Пресет:</label>
+                <select class="preset-select">
+                    <option value="">Без пресета</option>
+                    <option value="reader_button">Считыватель + Кнопка</option>
+                    <option value="reader_reader">Считыватель + Считыватель (4 счит.)</option>
+                </select>
+            </div>
+        `;
+        plinthDiv.appendChild(header);
+
+        const paramsDiv = document.createElement('div');
+        paramsDiv.className = 'plinth-params';
+        paramsDiv.innerHTML = `
+            <div class="plinth-param"><label>Плинтодержатель</label><input type="text" class="holder" readonly style="background:#f0f0f0;" value="${escapeHtml(defaultData.holder)}"></div>
+            <div class="plinth-param"><label>Номер плинта</label><input type="text" class="plinth-number" readonly style="background:#f0f0f0;" value="${escapeHtml(defaultData.plinthNumber)}"></div>
+            <div class="plinth-param"><label>СКУД №</label><input type="text" class="skud" value="${escapeHtml(skudValue)}"></div>
+            <div class="plinth-param"><label>Помещение</label><input type="text" class="room-number" value="${escapeHtml(defaultData.room)}"></div>
+        `;
+        plinthDiv.appendChild(paramsDiv);
+
+        const terminalRow = document.createElement('div');
+        terminalRow.className = 'terminal-row';
+        const terminalsWrapper = document.createElement('div');
+        terminalsWrapper.className = 'terminals';
+        for (let term = 0; term <= 9; term++) {
+            const termDiv = document.createElement('div');
+            termDiv.className = 'terminal';
+            termDiv.dataset.terminal = term;
+            const selectedVal = defaultData.terminalMap[term] || "";
+            termDiv.innerHTML = `
+                <div class="terminal-num">${term}</div>
+                <select class="device-select">${deviceOptions.map(opt => `<option value="${opt.value}" ${selectedVal === opt.value ? 'selected' : ''}>${opt.label}</option>`).join('')}</select>
+                <div class="terminal-legend">кл.${term}</div>
+            `;
+            terminalsWrapper.appendChild(termDiv);
+        }
+        terminalRow.appendChild(terminalsWrapper);
+        plinthDiv.appendChild(terminalRow);
+
+        // НОВЫЙ ПОРЯДОК ПОЛЕЙ КАБЕЛЕЙ
+        const cableDiv = document.createElement('div');
+        cableDiv.className = 'cable-numbers';
+        cableDiv.innerHTML = `
+            <div class="cable-field"><label>📖 каб.счит.</label><input type="text" class="cable-reader" value="${escapeHtml(defaultData.cableNumbers.reader || '')}"></div>
+            <div class="cable-field"><label>🧲 каб.геркона</label><input type="text" class="cable-contact" value="${escapeHtml(defaultData.cableNumbers.contact || '')}"></div>
+            <div class="cable-field"><label>🔒 каб.замка</label><input type="text" class="cable-lock" value="${escapeHtml(defaultData.cableNumbers.lock || '')}"></div>
+            <div class="cable-field"><label>🚪 каб.кн.Вых</label><input type="text" class="cable-exit_btn" value="${escapeHtml(defaultData.cableNumbers.exit_btn || '')}"></div>
+            <div class="cable-field"><label>🔥 каб.зам.пож</label><input type="text" class="cable-fire_lock" value="${escapeHtml(defaultData.cableNumbers.fire_lock || '')}"></div>
+            <div class="cable-field"><label>🔊 каб.сирены</label><input type="text" class="cable-siren" value="${escapeHtml(defaultData.cableNumbers.siren || '')}"></div>
+        `;
+        plinthDiv.appendChild(cableDiv);
+
+        const presetSelect = plinthDiv.querySelector('.preset-select');
+        presetSelect.addEventListener('change', function() {
+            applyPreset(plinthDiv, this.value);
+        });
+
+        return plinthDiv;
+    }
+
+    function createBoard(boardIndex, initialData = null, collapsed = true) {
+        const boardNumber = boardIndex + 1;
+        const defaultRack = "ХК";
+        const plinth1Number = 2 * boardNumber - 1;
+        const plinth2Number = 2 * boardNumber;
+
+        // Используем новую функцию для holder
+        const defaultHolder1 = buildHolder(defaultRack, plinth1Number);
+        const defaultHolder2 = buildHolder(defaultRack, plinth2Number);
+
+        const defaultData = {
+            rack: defaultRack,
+            skud1: "",
+            skud2: "",
+            plinth1: {
+                holder: defaultHolder1,
+                plinthNumber: plinth1Number.toString(),
+                room: "305",
+                terminalMap: {},
+                cableNumbers: {}
+            },
+            plinth2: {
+                holder: defaultHolder2,
+                plinthNumber: plinth2Number.toString(),
+                room: "305",
+                terminalMap: {},
+                cableNumbers: {}
+            }
+        };
+
+        if (initialData) {
+            if (initialData.rack) defaultData.rack = initialData.rack;
+            if (initialData.skud1 !== undefined) defaultData.skud1 = initialData.skud1;
+            if (initialData.skud2 !== undefined) defaultData.skud2 = initialData.skud2;
+            if (initialData.plinth1) {
+                defaultData.plinth1.room = initialData.plinth1.room || defaultData.plinth1.room;
+                defaultData.plinth1.terminalMap = initialData.plinth1.terminalMap || {};
+                defaultData.plinth1.cableNumbers = initialData.plinth1.cableNumbers || {};
+            }
+            if (initialData.plinth2) {
+                defaultData.plinth2.room = initialData.plinth2.room || defaultData.plinth2.room;
+                defaultData.plinth2.terminalMap = initialData.plinth2.terminalMap || {};
+                defaultData.plinth2.cableNumbers = initialData.plinth2.cableNumbers || {};
+            }
+            // Пересчитаем holder на основе актуального rack и номера
+            defaultData.plinth1.holder = buildHolder(defaultData.rack, defaultData.plinth1.plinthNumber);
+            defaultData.plinth2.holder = buildHolder(defaultData.rack, defaultData.plinth2.plinthNumber);
+        }
+
+        const boardDiv = document.createElement('div');
+        boardDiv.className = 'board-card';
+        boardDiv.dataset.boardIndex = boardIndex;
+
+        const header = document.createElement('div');
+        header.className = 'board-header';
+        header.innerHTML = `
+            <span>🔧 Плата SV005 №${boardNumber}</span>
+            <div style="display:flex; gap:6px; align-items:center;">
+                <button class="toggle-board-btn" style="background:transparent; color:white; font-size:1.1rem; padding:0 6px;">${collapsed ? '▶' : '▼'}</button>
+                <button class="delete-board-btn btn-danger" style="font-size:0.7rem; padding:0 10px; height:26px;">🗑</button>
+            </div>
+        `;
+        boardDiv.appendChild(header);
+
+        const boardParams = document.createElement('div');
+        boardParams.className = 'board-params';
+        boardParams.innerHTML = `
+            <div class="board-param"><label>Стойка ХК</label><input type="text" class="board-rack" value="${escapeHtml(defaultData.rack)}"></div>
+        `;
+        boardDiv.appendChild(boardParams);
+
+        const plinthsContainer = document.createElement('div');
+        plinthsContainer.className = 'plinth-container';
+        boardDiv.appendChild(plinthsContainer);
+
+        const plinth1Div = createPlinthElement('R1/D1', defaultData.plinth1, defaultData.skud1);
+        const plinth2Div = createPlinthElement('R2/D2', defaultData.plinth2, defaultData.skud2);
+        plinthsContainer.appendChild(plinth1Div);
+        plinthsContainer.appendChild(plinth2Div);
+
+        const copyBtn = document.createElement('button');
+        copyBtn.textContent = '📋 Копировать вход → выход';
+        copyBtn.className = 'btn-copy';
+        copyBtn.addEventListener('click', () => {
+            const selects1 = plinth1Div.querySelectorAll('.device-select');
+            const selects2 = plinth2Div.querySelectorAll('.device-select');
+            selects1.forEach((sel, idx) => {
+                selects2[idx].value = sel.value;
+            });
+            // Копирование кабелей – используем список всех классов, порядок не важен
+            const cableFields = ['cable-reader', 'cable-lock', 'cable-siren', 'cable-contact', 'cable-exit_btn', 'cable-fire_lock'];
+            cableFields.forEach(cls => {
+                const src = plinth1Div.querySelector(`.${cls}`);
+                const dst = plinth2Div.querySelector(`.${cls}`);
+                if (src && dst) dst.value = src.value;
+            });
+            const room1 = plinth1Div.querySelector('.room-number');
+            const room2 = plinth2Div.querySelector('.room-number');
+            if (room1 && room2) room2.value = room1.value;
+            showMessage('Настройки скопированы', 'success');
+        });
+        header.querySelector('div').appendChild(copyBtn);
+
+        const toggleBtn = header.querySelector('.toggle-board-btn');
+        const boardContent = document.createElement('div');
+        boardContent.className = 'board-content';
+        boardContent.appendChild(boardParams);
+        boardContent.appendChild(plinthsContainer);
+        boardDiv.appendChild(boardContent);
+
+        if (collapsed) {
+            boardContent.style.display = 'none';
+            toggleBtn.textContent = '▶';
+        } else {
+            boardContent.style.display = '';
+            toggleBtn.textContent = '▼';
+        }
+
+        toggleBtn.addEventListener('click', () => {
+            if (boardContent.style.display === 'none') {
+                boardContent.style.display = '';
+                toggleBtn.textContent = '▼';
+            } else {
+                boardContent.style.display = 'none';
+                toggleBtn.textContent = '▶';
+            }
+        });
+
+        const updateAllHolders = () => {
+            const rack = boardDiv.querySelector('.board-rack').value.trim();
+            const plinth1Num = plinth1Div.querySelector('.plinth-number').value;
+            const plinth2Num = plinth2Div.querySelector('.plinth-number').value;
+            updateHolderForPlinth(plinth1Div, rack, plinth1Num);
+            updateHolderForPlinth(plinth2Div, rack, plinth2Num);
+        };
+        const rackInput = boardDiv.querySelector('.board-rack');
+        rackInput.addEventListener('input', updateAllHolders);
+        updateAllHolders();
+
+        const delBtn = header.querySelector('.delete-board-btn');
+        delBtn.addEventListener('click', () => {
+            boardDiv.remove();
+            renumberBoards();
+        });
+
+        return boardDiv;
+    }
+
+    // ---------- ОБНОВЛЁННАЯ ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ ПОЛЯ holder ----------
+    function updateHolderForPlinth(plinthDiv, rack, plinthNumber) {
+        const holderInput = plinthDiv.querySelector('.holder');
+        if (holderInput) {
+            holderInput.value = buildHolder(rack, plinthNumber);
+        }
+    }
+
+    function renumberBoards() {
+        const boards = document.querySelectorAll('.board-card');
+        boards.forEach((board, idx) => {
+            board.dataset.boardIndex = idx;
+            const boardNumber = idx + 1;
+            const headerSpan = board.querySelector('.board-header span');
+            headerSpan.innerText = `🔧 Плата SV005 №${boardNumber}`;
+            
+            const plinths = board.querySelectorAll('.plinth-card');
+            const plinth1Number = 2 * boardNumber - 1;
+            const plinth2Number = 2 * boardNumber;
+            const rack = board.querySelector('.board-rack').value.trim();
+            
+            const plinth1Div = plinths[0];
+            const plinth1NumInput = plinth1Div.querySelector('.plinth-number');
+            plinth1NumInput.value = plinth1Number;
+            updateHolderForPlinth(plinth1Div, rack, plinth1Number);
+            
+            const plinth2Div = plinths[1];
+            const plinth2NumInput = plinth2Div.querySelector('.plinth-number');
+            plinth2NumInput.value = plinth2Number;
+            updateHolderForPlinth(plinth2Div, rack, plinth2Number);
+        });
+    }
+
+    function collectData() {
+        const address = document.getElementById('address').value.trim();
+        const globalModel = document.getElementById('globalModelSelect').value;
+        const boards = [];
+        const boardDivs = document.querySelectorAll('.board-card');
+        for (let i = 0; i < boardDivs.length; i++) {
+            const boardDiv = boardDivs[i];
+            const rack = boardDiv.querySelector('.board-rack').value.trim();
+            
+            const plinths = boardDiv.querySelectorAll('.plinth-card');
+            
+            const plinth1Div = plinths[0];
+            const plinth1Room = plinth1Div.querySelector('.room-number').value.trim();
+            const plinth1Skud = plinth1Div.querySelector('.skud').value.trim();
+            const plinth1Terminals = plinth1Div.querySelectorAll('.terminal');
+            const terminalMap1 = {};
+            plinth1Terminals.forEach(term => {
+                const termNum = parseInt(term.dataset.terminal, 10);
+                const device = term.querySelector('.device-select').value;
+                if (device && device !== "") terminalMap1[termNum] = device;
+            });
+            const cableNumbers1 = {
+                reader: plinth1Div.querySelector('.cable-reader').value.trim(),
+                lock: plinth1Div.querySelector('.cable-lock').value.trim(),
+                siren: plinth1Div.querySelector('.cable-siren').value.trim(),
+                contact: plinth1Div.querySelector('.cable-contact').value.trim(),
+                exit_btn: plinth1Div.querySelector('.cable-exit_btn').value.trim(),
+                fire_lock: plinth1Div.querySelector('.cable-fire_lock').value.trim()
+            };
+            
+            const plinth2Div = plinths[1];
+            const plinth2Room = plinth2Div.querySelector('.room-number').value.trim();
+            const plinth2Skud = plinth2Div.querySelector('.skud').value.trim();
+            const plinth2Terminals = plinth2Div.querySelectorAll('.terminal');
+            const terminalMap2 = {};
+            plinth2Terminals.forEach(term => {
+                const termNum = parseInt(term.dataset.terminal, 10);
+                const device = term.querySelector('.device-select').value;
+                if (device && device !== "") terminalMap2[termNum] = device;
+            });
+            const cableNumbers2 = {
+                reader: plinth2Div.querySelector('.cable-reader').value.trim(),
+                lock: plinth2Div.querySelector('.cable-lock').value.trim(),
+                siren: plinth2Div.querySelector('.cable-siren').value.trim(),
+                contact: plinth2Div.querySelector('.cable-contact').value.trim(),
+                exit_btn: plinth2Div.querySelector('.cable-exit_btn').value.trim(),
+                fire_lock: plinth2Div.querySelector('.cable-fire_lock').value.trim()
+            };
+            
+            boards.push({
+                rack,
+                skud1: plinth1Skud,
+                skud2: plinth2Skud,
+                plinth1: { room: plinth1Room, terminalMap: terminalMap1, cableNumbers: cableNumbers1 },
+                plinth2: { room: plinth2Room, terminalMap: terminalMap2, cableNumbers: cableNumbers2 }
+            });
+        }
+        return { address, globalModel, boards };
+    }
+
+    function validateBoards(boards) {
+        for (let i = 0; i < boards.length; i++) {
+            const board = boards[i];
+            const plinths = [board.plinth1, board.plinth2];
+            for (let p = 0; p < plinths.length; p++) {
+                const tm = plinths[p].terminalMap;
+                const devices = Object.values(tm);
+                
+                const readerCount = devices.filter(v => v === 'reader').length;
+                if (readerCount > 4) {
+                    return `Плата ${i+1}, плинт ${p+1}: более 4 считывателей (сейчас ${readerCount})`;
+                }
+                
+                const otherDevices = ['lock', 'fire_lock', 'contact', 'exit_btn', 'siren'];
+                for (const dev of otherDevices) {
+                    const count = devices.filter(v => v === dev).length;
+                    if (count > 1) {
+                        return `Плата ${i+1}, плинт ${p+1}: более одного "${dev}"`;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    function fillTestData() {
+        const boards = document.querySelectorAll('.board-card');
+        boards.forEach((board, idx) => {
+            const plinths = board.querySelectorAll('.plinth-card');
+            plinths.forEach((plinth, pIdx) => {
+                const selects = plinth.querySelectorAll('.device-select');
+                selects.forEach(sel => sel.value = '');
+                const termMap = { 0: 'reader', 2: 'lock', 4: 'contact', 6: 'exit_btn', 8: 'siren' };
+                for (const [term, device] of Object.entries(termMap)) {
+                    if (selects[term]) selects[term].value = device;
+                }
+                const cableFields = ['cable-reader', 'cable-lock', 'cable-siren', 'cable-contact', 'cable-exit_btn', 'cable-fire_lock'];
+                cableFields.forEach(cls => {
+                    const inp = plinth.querySelector(`.${cls}`);
+                    if (inp) inp.value = Math.floor(Math.random() * 900 + 100);
+                });
+                const room = plinth.querySelector('.room-number');
+                if (room) room.value = 300 + idx * 10 + pIdx;
+                const skud = plinth.querySelector('.skud');
+                if (skud) skud.value = `${idx+1}.${pIdx+1}`;
+            });
+            const rackInput = board.querySelector('.board-rack');
+            if (rackInput) rackInput.value = 'ХК' + (idx+1);
+        });
+        showMessage('Тестовые данные заполнены', 'success');
+    }
+
+    function applyGlobalRoom() {
+        const globalRoom = document.getElementById('globalRoom').value.trim();
+        if (!globalRoom) {
+            showMessage('Введите номер помещения', 'error');
+            return;
+        }
+        const boards = document.querySelectorAll('.board-card');
+        boards.forEach(board => {
+            const plinths = board.querySelectorAll('.plinth-card');
+            plinths.forEach(plinth => {
+                const roomInput = plinth.querySelector('.room-number');
+                if (roomInput) roomInput.value = globalRoom;
+            });
+        });
+        showMessage(`Помещение "${globalRoom}" применено ко всем плинтам`, 'success');
+    }
+
+    async function submitExcel() {
+        const data = collectData();
+        if (!data.address) {
+            showMessage('Укажите адрес объекта', 'error');
+            return;
+        }
+        if (data.boards.length === 0) {
+            showMessage('Добавьте хотя бы одну плату', 'error');
+            return;
+        }
+        for (let i = 0; i < data.boards.length; i++) {
+            const b = data.boards[i];
+            if (!b.rack || !b.plinth1.room || !b.plinth2.room) {
+                showMessage(`Заполните все поля для платы №${i+1} (стойка и помещения)`, 'error');
+                return;
+            }
+        }
+        const validationError = validateBoards(data.boards);
+        if (validationError) {
+            showMessage(validationError, 'error');
+            return;
+        }
+        showMessage('Генерация файла...', 'info');
+        try {
+            const response = await fetch('/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || 'Ошибка сервера');
+            }
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const contentDisposition = response.headers.get('Content-Disposition');
+            let filename = `${data.address}_${new Date().toISOString().slice(0,10)}.xlsx`;
+            if (contentDisposition) {
+                const match = contentDisposition.match(/filename\*=UTF-8''(.+)/);
+                if (match) filename = decodeURIComponent(match[1]);
+            }
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showMessage('✅ Файл успешно сгенерирован!', 'success');
+        } catch (err) {
+            showMessage(`Ошибка: ${err.message}`, 'error');
+        }
+    }
+
+    document.getElementById('addBoardBtn').addEventListener('click', () => {
+        const container = document.getElementById('boardsContainer');
+        const newBoard = createBoard(container.children.length, null, true);
+        container.appendChild(newBoard);
+    });
+
+    document.getElementById('createMultipleBtn').addEventListener('click', () => {
+        const num = parseInt(document.getElementById('numBoards').value, 10);
+        if (isNaN(num) || num < 1) {
+            showMessage('Введите корректное количество (≥1)', 'error');
+            return;
+        }
+        const container = document.getElementById('boardsContainer');
+        const currentCount = container.children.length;
+        for (let i = 0; i < num; i++) {
+            const board = createBoard(currentCount + i, null, true);
+            container.appendChild(board);
+        }
+        showMessage(`Создано ${num} плат (свернуты)`, 'success');
+    });
+
+    document.getElementById('fillTestBtn').addEventListener('click', fillTestData);
+    document.getElementById('applyGlobalRoomBtn').addEventListener('click', applyGlobalRoom);
+
+    document.getElementById('submitExcelBtn').addEventListener('click', submitExcel);
+    document.getElementById('submitExcelTopBtn').addEventListener('click', submitExcel);
+
+    function showMessage(msg, type) {
+        const msgDiv = document.getElementById('message');
+        msgDiv.innerHTML = `<div class="${type}">${msg}</div>`;
+        setTimeout(() => { msgDiv.innerHTML = ''; }, 4000);
+    }
+
+    const container = document.getElementById('boardsContainer');
+    container.appendChild(createBoard(0, null, true));
+</script>
+</body>
+</html>
