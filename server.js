@@ -52,14 +52,12 @@ function copyBlock(worksheet, sourceStart, sourceEnd, targetStart) {
 
 // ---------- Автоподгон ширины столбцов (исключая лист с плинтами) ----------
 function isPlinthSheet(sheetName) {
-    // Имена листов, которые содержат основные плинты/контроллеры
     const plinthSheetNames = ['Лист1', 'SV777-1 (SV004)'];
     return plinthSheetNames.includes(sheetName);
 }
 
 function applyAutoFit(workbook) {
     workbook.worksheets.forEach(worksheet => {
-        // Пропускаем листы с плинтами
         if (isPlinthSheet(worksheet.name)) return;
 
         const colMaxLength = {};
@@ -262,8 +260,8 @@ async function fillPlinthBlockSV005(worksheet, startRow, blockType, plinthData, 
     const cn = plinthData.cableNumbers || {};
 
     const hasReader = Object.values(tm).includes('reader');
+    let deviceLabel = '';
     if (hasReader) {
-        let deviceLabel = '';
         if (blockType === 'input') {
             deviceLabel = 'Считыватель вх';
         } else {
@@ -280,6 +278,9 @@ async function fillPlinthBlockSV005(worksheet, startRow, blockType, plinthData, 
         worksheet.getCell(`D${devicesRow}`).value = '';
         worksheet.getCell(`F${devicesRow}`).value = '';
     }
+
+    // Сохраняем метку устройства для использования в шпоргалке
+    plinthData.deviceLabel = deviceLabel;
 
     const hasLock = Object.values(tm).includes('lock');
     const hasFireLock = Object.values(tm).includes('fire_lock');
@@ -362,7 +363,7 @@ async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel
         if (devRow > worksheet.rowCount || roomRow > worksheet.rowCount) continue;
         for (let i = 0; i < group.pins.length; i++) {
             const pin = group.pins[i];
-            const colDevice = ['B','F','J','N'][i];   // только 4 колонки
+            const colDevice = ['B','F','J','N'][i];
             const colCable = ['D','H','L','P'][i];
             const device = tm[pin] || '';
             const cable = cm[pin] || '';
@@ -397,7 +398,7 @@ function createSheetsSV004(workbook, boards, globalModel) {
         const cm = board.plinth1.cableMap || {};
         const rm = board.plinth1.roomMap || {};
 
-        for (let pin = 0; pin <= 3; pin++) {  // только 0–3
+        for (let pin = 0; pin <= 3; pin++) {
             const device = tm[pin] || '';
             const cable = cm[pin] || '';
             const room = (rm[pin] && rm[pin].trim()) ? rm[pin] : '';
@@ -505,7 +506,8 @@ function createSheetsSV005(workbook, boards, globalModel) {
         cheatSheet.getCell(`B${rowIdx}`).value = '';
         cheatSheet.getCell(`C${rowIdx}`).value = `R${num2}`;
         if (hasReader2) {
-            cheatSheet.getCell(`D${rowIdx}`).value = 'Считыватель вых';
+            // Используем сохранённую метку устройства (она уже вычислена в fillPlinthBlockSV005)
+            cheatSheet.getCell(`D${rowIdx}`).value = board.plinth2.deviceLabel || 'Считыватель вых';
             cheatSheet.getCell(`F${rowIdx}`).value = `ШЛ.${cn2.reader || ''}`;
             cheatSheet.getCell(`G${rowIdx}`).value = counter++;
         } else {
@@ -513,7 +515,7 @@ function createSheetsSV005(workbook, boards, globalModel) {
             cheatSheet.getCell(`F${rowIdx}`).value = '';
             cheatSheet.getCell(`G${rowIdx}`).value = '';
         }
-        cheatSheet.getCell(`E${rowIdx}`).value = `пом. ${commonRoom}`;
+        cheatSheet.getCell(`E${rowIdx}`).value = `пом. ${board.plinth2.room || ''}`;
         rowIdx++;
 
         // D2
@@ -527,7 +529,7 @@ function createSheetsSV005(workbook, boards, globalModel) {
         } else {
             cheatSheet.getCell(`D${rowIdx}`).value = '';
         }
-        cheatSheet.getCell(`E${rowIdx}`).value = `пом. ${commonRoom}`;
+        cheatSheet.getCell(`E${rowIdx}`).value = `пом. ${board.plinth2.room || ''}`;
         cheatSheet.getCell(`F${rowIdx}`).value = board.skud2 ? `СКД.${board.skud2}` : '';
         rowIdx++;
 
@@ -581,7 +583,6 @@ app.post('/generate-sv005', async (req, res) => {
         }
         blocks.sort((a, b) => a.startRow - b.startRow);
 
-        // Для SV005 каждая плата даёт 2 блока (вход и выход)
         const neededInput = boards.length;
         const neededOutput = boards.length;
 
@@ -623,37 +624,43 @@ app.post('/generate-sv005', async (req, res) => {
             const board = boards[i];
             const boardNumber = i + 1;
 
+            // Создаём временные объекты для заполнения, чтобы потом забрать deviceLabel
+            const plinth1Data = {
+                rack: board.rack,
+                boardNumber: boardNumber,
+                plinthNumber: board.plinth1.number,
+                skud: board.skud1,
+                room: board.plinth1.room,
+                terminalMap: board.plinth1.terminalMap,
+                cableNumbers: board.plinth1.cableNumbers
+            };
             await fillPlinthBlockSV005(
                 worksheet,
                 usedInputBlocks[i].startRow,
                 'input',
-                {
-                    rack: board.rack,
-                    boardNumber: boardNumber,
-                    plinthNumber: board.plinth1.number,
-                    skud: board.skud1,
-                    room: board.plinth1.room,
-                    terminalMap: board.plinth1.terminalMap,
-                    cableNumbers: board.plinth1.cableNumbers
-                },
+                plinth1Data,
                 globalModel
             );
+            // Сохраняем вычисленную метку обратно в структуру boards
+            board.plinth1.deviceLabel = plinth1Data.deviceLabel;
 
+            const plinth2Data = {
+                rack: board.rack,
+                boardNumber: boardNumber,
+                plinthNumber: board.plinth2.number,
+                skud: board.skud2,
+                room: board.plinth2.room,
+                terminalMap: board.plinth2.terminalMap,
+                cableNumbers: board.plinth2.cableNumbers
+            };
             await fillPlinthBlockSV005(
                 worksheet,
                 usedOutputBlocks[i].startRow,
                 'output',
-                {
-                    rack: board.rack,
-                    boardNumber: boardNumber,
-                    plinthNumber: board.plinth2.number,
-                    skud: board.skud2,
-                    room: board.plinth2.room,
-                    terminalMap: board.plinth2.terminalMap,
-                    cableNumbers: board.plinth2.cableNumbers
-                },
+                plinth2Data,
                 globalModel
             );
+            board.plinth2.deviceLabel = plinth2Data.deviceLabel;
         }
 
         const allBlocks = getBlocksSV005(worksheet);
@@ -678,7 +685,6 @@ app.post('/generate-sv005', async (req, res) => {
 
         createSheetsSV005(workbook, boards, globalModel);
 
-        // Автоподгон ширины столбцов для всех листов (кроме листа с плинтами)
         applyAutoFit(workbook);
 
         const buffer = await workbook.xlsx.writeBuffer();
@@ -780,7 +786,6 @@ app.post('/generate-sv004', async (req, res) => {
 
         createSheetsSV004(workbook, boards, globalModel);
 
-        // Автоподгон ширины столбцов для всех листов (кроме листа с плинтами)
         applyAutoFit(workbook);
 
         const buffer = await workbook.xlsx.writeBuffer();
