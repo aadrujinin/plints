@@ -13,7 +13,7 @@
             padding: 14px;
         }
         .container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             background: white;
             border-radius: 24px;
@@ -169,6 +169,7 @@
             padding: 12px;
         }
         .plinth-card {
+            width: 100%;
             background: #fafcff;
             border: 1px solid #dce5f0;
             border-radius: 18px;
@@ -217,66 +218,67 @@
         .terminal-row {
             background: #fdfdf5;
             border-radius: 16px;
-            padding: 8px 10px;
-            margin: 0 14px 14px 14px;
+            padding: 6px 8px;
+            margin: 0 14px 10px 14px;
             border: 1px solid #e0e9f2;
         }
         .terminals {
             display: flex;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
             justify-content: center;
-            gap: 6px;
+            gap: 4px;
         }
         .terminal {
-            flex: 1 1 150px;
-            min-width: 140px;
+            flex: 1 0 auto;
+            min-width: 0;
             background: #f4f7fd;
-            border-radius: 12px;
-            padding: 4px 3px;
+            border-radius: 10px;
+            padding: 3px 2px;
             text-align: center;
         }
         .terminal-num {
             font-weight: bold;
             font-family: monospace;
-            font-size: 0.75rem;
+            font-size: 0.65rem;
             background: #2c3e50;
             color: white;
             display: inline-block;
-            width: 24px;
-            line-height: 24px;
-            border-radius: 24px;
-            margin-bottom: 3px;
+            width: 20px;
+            line-height: 20px;
+            border-radius: 20px;
+            margin-bottom: 2px;
         }
         .terminal select {
-            padding: 2px 4px;
-            border-radius: 12px;
-            font-size: 0.6rem;
-            height: 22px;
+            padding: 1px 2px;
+            border-radius: 10px;
+            font-size: 0.55rem;
+            height: 20px;
             border: 1px solid #ccc;
-            min-width: 50px;
+            min-width: 30px;
+            width: 100%;
         }
         .terminal input[type="text"],
         .terminal input[type="number"] {
-            padding: 2px 4px;
-            border-radius: 12px;
-            font-size: 0.6rem;
-            height: 22px;
+            padding: 1px 2px;
+            border-radius: 10px;
+            font-size: 0.55rem;
+            height: 20px;
             border: 1px solid #ccc;
-            margin-top: 2px;
+            margin-top: 1px;
         }
         .terminal input[type="number"] {
-            width: 35px;
+            width: 30px;
             display: inline-block;
         }
         .terminal input.room-pin,
         .terminal input.cable-pin {
             width: 100%;
-            margin-top: 2px;
+            margin-top: 1px;
         }
         .terminal-legend {
-            font-size: 0.5rem;
+            font-size: 0.45rem;
             color: #6f7885;
-            margin-top: 2px;
+            margin-top: 1px;
         }
         /* Стили для SV004: две колонки в одной строке */
         .terminal .device-row {
@@ -300,11 +302,15 @@
         }
         .terminal .device-row .devices-col .dev-group select {
             flex: 1;
-            min-width: 40px;
+            min-width: 30px;
+            font-size: 0.5rem;
+            height: 18px;
         }
         .terminal .device-row .devices-col .dev-group input {
-            width: 30px;
+            width: 25px;
             flex-shrink: 0;
+            height: 18px;
+            font-size: 0.5rem;
         }
         .terminal .device-row .cable-room-col {
             display: flex;
@@ -316,35 +322,39 @@
         .terminal .device-row .cable-room-col input {
             width: 100%;
             margin-top: 0;
+            height: 18px;
+            font-size: 0.5rem;
         }
         .cable-numbers {
             background: #f0f6fe;
-            padding: 8px 14px;
-            margin: 0 14px 14px 14px;
-            border-radius: 16px;
+            padding: 6px 12px;
+            margin: 0 14px 10px 14px;
+            border-radius: 14px;
             display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
+            flex-wrap: nowrap;
+            gap: 6px;
             justify-content: space-between;
         }
         .cable-field {
             display: flex;
             flex-direction: column;
-            gap: 2px;
-            min-width: 80px;
+            gap: 1px;
+            flex: 1 0 auto;
+            min-width: 0;
         }
         .cable-field label {
-            font-size: 0.55rem;
+            font-size: 0.65rem;
             font-weight: 600;
             color: #2c5282;
+            white-space: nowrap;
         }
         .cable-field input {
-            padding: 3px 6px;
-            border-radius: 12px;
+            padding: 2px 4px;
+            border-radius: 10px;
             border: 1px solid #bdd4e7;
-            width: 90px;
-            font-size: 0.75rem;
-            height: 24px;
+            width: 100%;
+            font-size: 0.7rem;
+            height: 22px;
         }
         .btn-copy {
             background: #4b5563;
@@ -377,12 +387,12 @@
         .field select { min-width: 100px; }
         .board-param input { min-width: 80px; }
         .preset-select {
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             padding: 2px 6px;
             border-radius: 12px;
             border: 1px solid #b0c4d8;
             background: white;
-            height: 26px;
+            height: 24px;
         }
         .board-type-select {
             font-size: 0.8rem;
@@ -407,6 +417,14 @@
         }
         .unused-pin {
             opacity: 0.5;
+        }
+        /* Адаптивность для очень узких экранов */
+        @media (max-width: 1200px) {
+            .container { padding: 12px; }
+            .terminal select { font-size: 0.5rem; min-width: 20px; }
+            .terminal-num { width: 16px; line-height: 16px; font-size: 0.55rem; }
+            .cable-field input { font-size: 0.55rem; height: 18px; }
+            .cable-field label { font-size: 0.55rem; }
         }
     </style>
 </head>
@@ -461,7 +479,7 @@
     </div>
     <div id="message"></div>
     <div class="info-note">
-        ▼ Для SV005: два плинта (R1/D1 и R2/D2). Для SV004: один плинт с 4 пинами (0–3), на каждом пине можно выбрать до двух устройств (ИК, КАВ, СМК, ДРС) с указанием количества (по умолчанию 1).<br>
+        ▼ Для SV005: два плинта (R1/D1 и R2/D2) расположены вертикально (каждый на отдельной строке). Для SV004: один плинт с 4 пинами (0–3), на каждом пине можно выбрать до двух устройств (ИК, КАВ, СМК, ДРС) с указанием количества (по умолчанию 1).<br>
         • Нумерация плинтов сквозная по порядку плат: SV005 даёт 2 плинта, SV004 – 1 плинт.<br>
         • У каждого пина SV004 можно указать свой номер помещения (если не указан, ячейка остаётся пустой).<br>
         • Кнопка "Копировать вход → выход" дублирует настройки (только для SV005).
@@ -591,12 +609,12 @@
         const cableDiv = document.createElement('div');
         cableDiv.className = 'cable-numbers';
         cableDiv.innerHTML = `
-            <div class="cable-field"><label>📖 каб.счит.</label><input type="text" class="cable-reader" value="${escapeHtml(defaultData.cableNumbers.reader || '')}"></div>
-            <div class="cable-field"><label>🧲 каб.геркона</label><input type="text" class="cable-contact" value="${escapeHtml(defaultData.cableNumbers.contact || '')}"></div>
-            <div class="cable-field"><label>🔒 каб.замка</label><input type="text" class="cable-lock" value="${escapeHtml(defaultData.cableNumbers.lock || '')}"></div>
-            <div class="cable-field"><label>🚪 каб.кн.Вых</label><input type="text" class="cable-exit_btn" value="${escapeHtml(defaultData.cableNumbers.exit_btn || '')}"></div>
-            <div class="cable-field"><label>🔥 каб.зам.пож</label><input type="text" class="cable-fire_lock" value="${escapeHtml(defaultData.cableNumbers.fire_lock || '')}"></div>
-            <div class="cable-field"><label>🔊 каб.сирены</label><input type="text" class="cable-siren" value="${escapeHtml(defaultData.cableNumbers.siren || '')}"></div>
+            <div class="cable-field"><label>📖 счит.</label><input type="text" class="cable-reader" value="${escapeHtml(defaultData.cableNumbers.reader || '')}"></div>
+            <div class="cable-field"><label>🧲 герк.</label><input type="text" class="cable-contact" value="${escapeHtml(defaultData.cableNumbers.contact || '')}"></div>
+            <div class="cable-field"><label>🔒 замка</label><input type="text" class="cable-lock" value="${escapeHtml(defaultData.cableNumbers.lock || '')}"></div>
+            <div class="cable-field"><label>🚪 кн.Вых</label><input type="text" class="cable-exit_btn" value="${escapeHtml(defaultData.cableNumbers.exit_btn || '')}"></div>
+            <div class="cable-field"><label>🔥 зам.пож</label><input type="text" class="cable-fire_lock" value="${escapeHtml(defaultData.cableNumbers.fire_lock || '')}"></div>
+            <div class="cable-field"><label>🔊 сирены</label><input type="text" class="cable-siren" value="${escapeHtml(defaultData.cableNumbers.siren || '')}"></div>
         `;
         plinthDiv.appendChild(cableDiv);
 
