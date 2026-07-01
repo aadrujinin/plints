@@ -464,35 +464,40 @@ function createSheetsSV005(workbook, boards, globalModel) {
         const hasLock1 = Object.values(tm1).includes('lock');
         const hasFireLock1 = Object.values(tm1).includes('fire_lock');
 
-        cheatSheet.getCell(`A${rowIdx}`).value = '';
-        cheatSheet.getCell(`B${rowIdx}`).value = boardNumber;
-        cheatSheet.getCell(`C${rowIdx}`).value = `R${num1}`;
+        const rowR1 = rowIdx;
+        cheatSheet.getCell(`A${rowR1}`).value = '';
+        cheatSheet.getCell(`B${rowR1}`).value = boardNumber;
+        cheatSheet.getCell(`C${rowR1}`).value = `R${num1}`;
         if (hasReader1) {
-            cheatSheet.getCell(`D${rowIdx}`).value = 'Считыватель вх';
-            cheatSheet.getCell(`F${rowIdx}`).value = `ШЛ.${cn1.reader || ''}`;
-            cheatSheet.getCell(`G${rowIdx}`).value = counter++;
+            cheatSheet.getCell(`D${rowR1}`).value = 'Считыватель вх';
+            cheatSheet.getCell(`F${rowR1}`).value = `ШЛ.${cn1.reader || ''}`;
+            cheatSheet.getCell(`G${rowR1}`).value = counter++;
         } else {
-            cheatSheet.getCell(`D${rowIdx}`).value = '';
-            cheatSheet.getCell(`F${rowIdx}`).value = '';
-            cheatSheet.getCell(`G${rowIdx}`).value = '';
+            cheatSheet.getCell(`D${rowR1}`).value = '';
+            cheatSheet.getCell(`F${rowR1}`).value = '';
+            cheatSheet.getCell(`G${rowR1}`).value = '';
         }
-        cheatSheet.getCell(`E${rowIdx}`).value = `пом. ${commonRoom}`;
+        cheatSheet.getCell(`E${rowR1}`).value = `пом. ${commonRoom}`;
         rowIdx++;
 
-        // D1
-        cheatSheet.getCell(`A${rowIdx}`).value = '';
-        cheatSheet.getCell(`B${rowIdx}`).value = '';
-        cheatSheet.getCell(`C${rowIdx}`).value = `D${num1}`;
+        const rowD1 = rowIdx;
+        cheatSheet.getCell(`A${rowD1}`).value = '';
+        cheatSheet.getCell(`B${rowD1}`).value = '';
+        cheatSheet.getCell(`C${rowD1}`).value = `D${num1}`;
         if (hasLock1) {
-            cheatSheet.getCell(`D${rowIdx}`).value = 'Замок';
+            cheatSheet.getCell(`D${rowD1}`).value = 'Замок';
         } else if (hasFireLock1) {
-            cheatSheet.getCell(`D${rowIdx}`).value = 'Замок пож.дв.';
+            cheatSheet.getCell(`D${rowD1}`).value = 'Замок пож.дв.';
         } else {
-            cheatSheet.getCell(`D${rowIdx}`).value = '';
+            cheatSheet.getCell(`D${rowD1}`).value = '';
         }
-        cheatSheet.getCell(`E${rowIdx}`).value = `пом. ${commonRoom}`;
-        cheatSheet.getCell(`F${rowIdx}`).value = board.skud1 ? `СКД.${board.skud1}` : '';
+        cheatSheet.getCell(`E${rowD1}`).value = `пом. ${commonRoom}`;
+        cheatSheet.getCell(`F${rowD1}`).value = board.skud1 ? `СКД.${board.skud1}` : '';
         rowIdx++;
+
+        // Объединение G для R1 и D1, заливка красным
+        cheatSheet.mergeCells(`G${rowR1}:G${rowD1}`);
+        cheatSheet.getCell(`G${rowR1}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0000' } };
 
         // ----- Выходной плинт (R2/D2) -----
         const tm2 = board.plinth2.terminalMap || {};
@@ -501,37 +506,45 @@ function createSheetsSV005(workbook, boards, globalModel) {
         const hasLock2 = Object.values(tm2).includes('lock');
         const hasFireLock2 = Object.values(tm2).includes('fire_lock');
 
-        // R2
-        cheatSheet.getCell(`A${rowIdx}`).value = '';
-        cheatSheet.getCell(`B${rowIdx}`).value = '';
-        cheatSheet.getCell(`C${rowIdx}`).value = `R${num2}`;
+        const rowR2 = rowIdx;
+        cheatSheet.getCell(`A${rowR2}`).value = '';
+        cheatSheet.getCell(`B${rowR2}`).value = '';
+        cheatSheet.getCell(`C${rowR2}`).value = `R${num2}`;
         if (hasReader2) {
-            // Используем сохранённую метку устройства (она уже вычислена в fillPlinthBlockSV005)
-            cheatSheet.getCell(`D${rowIdx}`).value = board.plinth2.deviceLabel || 'Считыватель вых';
-            cheatSheet.getCell(`F${rowIdx}`).value = `ШЛ.${cn2.reader || ''}`;
-            cheatSheet.getCell(`G${rowIdx}`).value = counter++;
+            cheatSheet.getCell(`D${rowR2}`).value = board.plinth2.deviceLabel || 'Считыватель вых';
+            cheatSheet.getCell(`F${rowR2}`).value = `ШЛ.${cn2.reader || ''}`;
+            cheatSheet.getCell(`G${rowR2}`).value = counter++;
         } else {
-            cheatSheet.getCell(`D${rowIdx}`).value = '';
-            cheatSheet.getCell(`F${rowIdx}`).value = '';
-            cheatSheet.getCell(`G${rowIdx}`).value = '';
+            cheatSheet.getCell(`D${rowR2}`).value = '';
+            cheatSheet.getCell(`F${rowR2}`).value = '';
+            cheatSheet.getCell(`G${rowR2}`).value = '';
         }
-        cheatSheet.getCell(`E${rowIdx}`).value = `пом. ${board.plinth2.room || ''}`;
+        cheatSheet.getCell(`E${rowR2}`).value = `пом. ${board.plinth2.room || ''}`;
         rowIdx++;
 
-        // D2
-        cheatSheet.getCell(`A${rowIdx}`).value = '';
-        cheatSheet.getCell(`B${rowIdx}`).value = '';
-        cheatSheet.getCell(`C${rowIdx}`).value = `D${num2}`;
+        const rowD2 = rowIdx;
+        cheatSheet.getCell(`A${rowD2}`).value = '';
+        cheatSheet.getCell(`B${rowD2}`).value = '';
+        cheatSheet.getCell(`C${rowD2}`).value = `D${num2}`;
         if (hasLock2) {
-            cheatSheet.getCell(`D${rowIdx}`).value = 'Замок';
+            cheatSheet.getCell(`D${rowD2}`).value = 'Замок';
         } else if (hasFireLock2) {
-            cheatSheet.getCell(`D${rowIdx}`).value = 'Замок пож.дв.';
+            cheatSheet.getCell(`D${rowD2}`).value = 'Замок пож.дв.';
         } else {
-            cheatSheet.getCell(`D${rowIdx}`).value = '';
+            cheatSheet.getCell(`D${rowD2}`).value = '';
         }
-        cheatSheet.getCell(`E${rowIdx}`).value = `пом. ${board.plinth2.room || ''}`;
-        cheatSheet.getCell(`F${rowIdx}`).value = board.skud2 ? `СКД.${board.skud2}` : '';
+        cheatSheet.getCell(`E${rowD2}`).value = `пом. ${board.plinth2.room || ''}`;
+        cheatSheet.getCell(`F${rowD2}`).value = board.skud2 ? `СКД.${board.skud2}` : '';
+        // G для D2 оставляем пустым (нет номера)
         rowIdx++;
+
+        // Заливка для выходного плинта в зависимости от типа считывателя
+        if (hasReader2) {
+            const fillColor = (board.plinth2.deviceLabel === 'Считыватель вх') ? 'FFA500' : 'FF0000';
+            cheatSheet.getCell(`G${rowR2}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillColor } };
+            cheatSheet.getCell(`G${rowD2}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillColor } };
+        }
+        // если считывателя нет – заливка не применяется
 
         // пустая строка между платами
         rowIdx++;
@@ -624,7 +637,6 @@ app.post('/generate-sv005', async (req, res) => {
             const board = boards[i];
             const boardNumber = i + 1;
 
-            // Создаём временные объекты для заполнения, чтобы потом забрать deviceLabel
             const plinth1Data = {
                 rack: board.rack,
                 boardNumber: boardNumber,
@@ -641,7 +653,6 @@ app.post('/generate-sv005', async (req, res) => {
                 plinth1Data,
                 globalModel
             );
-            // Сохраняем вычисленную метку обратно в структуру boards
             board.plinth1.deviceLabel = plinth1Data.deviceLabel;
 
             const plinth2Data = {
