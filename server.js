@@ -535,14 +535,17 @@ function createSheetsSV005(workbook, boards, globalModel) {
         }
         cheatSheet.getCell(`E${rowD2}`).value = `пом. ${board.plinth2.room || ''}`;
         cheatSheet.getCell(`F${rowD2}`).value = board.skud2 ? `СКД.${board.skud2}` : '';
-        // G для D2 оставляем пустым (нет номера)
         rowIdx++;
 
-        // Заливка для выходного плинта в зависимости от типа считывателя
+        // Заливка для выходного плинта:
+        // - R2: оранжевый, если считыватель вх; красный, если вых
+        // - D2: всегда красный (если считыватель присутствует)
         if (hasReader2) {
-            const fillColor = (board.plinth2.deviceLabel === 'Считыватель вх') ? 'FFA500' : 'FF0000';
-            cheatSheet.getCell(`G${rowR2}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillColor } };
-            cheatSheet.getCell(`G${rowD2}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillColor } };
+            // Цвет для R2
+            const fillColorR2 = (board.plinth2.deviceLabel === 'Считыватель вх') ? 'FFA500' : 'FF0000';
+            cheatSheet.getCell(`G${rowR2}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillColorR2 } };
+            // D2 всегда красный
+            cheatSheet.getCell(`G${rowD2}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0000' } };
         }
         // если считывателя нет – заливка не применяется
 
