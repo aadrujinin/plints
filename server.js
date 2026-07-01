@@ -52,14 +52,12 @@ function copyBlock(worksheet, sourceStart, sourceEnd, targetStart) {
 
 // ---------- Автоподгон ширины столбцов (исключая лист с плинтами) ----------
 function isPlinthSheet(sheetName) {
-    // Имена листов, которые содержат основные плинты/контроллеры
     const plinthSheetNames = ['Лист1', 'SV777-1 (SV004)'];
     return plinthSheetNames.includes(sheetName);
 }
 
 function applyAutoFit(workbook) {
     workbook.worksheets.forEach(worksheet => {
-        // Пропускаем листы с плинтами
         if (isPlinthSheet(worksheet.name)) return;
 
         const colMaxLength = {};
@@ -262,8 +260,8 @@ async function fillPlinthBlockSV005(worksheet, startRow, blockType, plinthData, 
     const cn = plinthData.cableNumbers || {};
 
     const hasReader = Object.values(tm).includes('reader');
+    let deviceLabel = '';
     if (hasReader) {
-        let deviceLabel = '';
         if (blockType === 'input') {
             deviceLabel = 'Считыватель вх';
         } else {
@@ -280,6 +278,9 @@ async function fillPlinthBlockSV005(worksheet, startRow, blockType, plinthData, 
         worksheet.getCell(`D${devicesRow}`).value = '';
         worksheet.getCell(`F${devicesRow}`).value = '';
     }
+
+    // Сохраняем метку устройства для использования в шпоргалке
+    plinthData.deviceLabel = deviceLabel;
 
     const hasLock = Object.values(tm).includes('lock');
     const hasFireLock = Object.values(tm).includes('fire_lock');
@@ -362,7 +363,7 @@ async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel
         if (devRow > worksheet.rowCount || roomRow > worksheet.rowCount) continue;
         for (let i = 0; i < group.pins.length; i++) {
             const pin = group.pins[i];
-            const colDevice = ['B','F','J','N'][i];   // только 4 колонки
+            const colDevice = ['B','F','J','N'][i];
             const colCable = ['D','H','L','P'][i];
             const device = tm[pin] || '';
             const cable = cm[pin] || '';
@@ -397,7 +398,7 @@ function createSheetsSV004(workbook, boards, globalModel) {
         const cm = board.plinth1.cableMap || {};
         const rm = board.plinth1.roomMap || {};
 
-        for (let pin = 0; pin <= 3; pin++) {  // только 0–3
+        for (let pin = 0; pin <= 3; pin++) {
             const device = tm[pin] || '';
             const cable = cm[pin] || '';
             const room = (rm[pin] && rm[pin].trim()) ? rm[pin] : '';
@@ -463,35 +464,40 @@ function createSheetsSV005(workbook, boards, globalModel) {
         const hasLock1 = Object.values(tm1).includes('lock');
         const hasFireLock1 = Object.values(tm1).includes('fire_lock');
 
-        cheatSheet.getCell(`A${rowIdx}`).value = '';
-        cheatSheet.getCell(`B${rowIdx}`).value = boardNumber;
-        cheatSheet.getCell(`C${rowIdx}`).value = `R${num1}`;
+        const rowR1 = rowIdx;
+        cheatSheet.getCell(`A${rowR1}`).value = '';
+        cheatSheet.getCell(`B${rowR1}`).value = boardNumber;
+        cheatSheet.getCell(`C${rowR1}`).value = `R${num1}`;
         if (hasReader1) {
-            cheatSheet.getCell(`D${rowIdx}`).value = 'Считыватель вх';
-            cheatSheet.getCell(`F${rowIdx}`).value = `ШЛ.${cn1.reader || ''}`;
-            cheatSheet.getCell(`G${rowIdx}`).value = counter++;
+            cheatSheet.getCell(`D${rowR1}`).value = 'Считыватель вх';
+            cheatSheet.getCell(`F${rowR1}`).value = `ШЛ.${cn1.reader || ''}`;
+            cheatSheet.getCell(`G${rowR1}`).value = counter++;
         } else {
-            cheatSheet.getCell(`D${rowIdx}`).value = '';
-            cheatSheet.getCell(`F${rowIdx}`).value = '';
-            cheatSheet.getCell(`G${rowIdx}`).value = '';
+            cheatSheet.getCell(`D${rowR1}`).value = '';
+            cheatSheet.getCell(`F${rowR1}`).value = '';
+            cheatSheet.getCell(`G${rowR1}`).value = '';
         }
-        cheatSheet.getCell(`E${rowIdx}`).value = `пом. ${commonRoom}`;
+        cheatSheet.getCell(`E${rowR1}`).value = `пом. ${commonRoom}`;
         rowIdx++;
 
-        // D1
-        cheatSheet.getCell(`A${rowIdx}`).value = '';
-        cheatSheet.getCell(`B${rowIdx}`).value = '';
-        cheatSheet.getCell(`C${rowIdx}`).value = `D${num1}`;
+        const rowD1 = rowIdx;
+        cheatSheet.getCell(`A${rowD1}`).value = '';
+        cheatSheet.getCell(`B${rowD1}`).value = '';
+        cheatSheet.getCell(`C${rowD1}`).value = `D${num1}`;
         if (hasLock1) {
-            cheatSheet.getCell(`D${rowIdx}`).value = 'Замок';
+            cheatSheet.getCell(`D${rowD1}`).value = 'Замок';
         } else if (hasFireLock1) {
-            cheatSheet.getCell(`D${rowIdx}`).value = 'Замок пож.дв.';
+            cheatSheet.getCell(`D${rowD1}`).value = 'Замок пож.дв.';
         } else {
-            cheatSheet.getCell(`D${rowIdx}`).value = '';
+            cheatSheet.getCell(`D${rowD1}`).value = '';
         }
-        cheatSheet.getCell(`E${rowIdx}`).value = `пом. ${commonRoom}`;
-        cheatSheet.getCell(`F${rowIdx}`).value = board.skud1 ? `СКД.${board.skud1}` : '';
+        cheatSheet.getCell(`E${rowD1}`).value = `пом. ${commonRoom}`;
+        cheatSheet.getCell(`F${rowD1}`).value = board.skud1 ? `СКД.${board.skud1}` : '';
         rowIdx++;
+
+        // Объединение G для R1 и D1, заливка красным
+        cheatSheet.mergeCells(`G${rowR1}:G${rowD1}`);
+        cheatSheet.getCell(`G${rowR1}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0000' } };
 
         // ----- Выходной плинт (R2/D2) -----
         const tm2 = board.plinth2.terminalMap || {};
@@ -500,36 +506,48 @@ function createSheetsSV005(workbook, boards, globalModel) {
         const hasLock2 = Object.values(tm2).includes('lock');
         const hasFireLock2 = Object.values(tm2).includes('fire_lock');
 
-        // R2
-        cheatSheet.getCell(`A${rowIdx}`).value = '';
-        cheatSheet.getCell(`B${rowIdx}`).value = '';
-        cheatSheet.getCell(`C${rowIdx}`).value = `R${num2}`;
+        const rowR2 = rowIdx;
+        cheatSheet.getCell(`A${rowR2}`).value = '';
+        cheatSheet.getCell(`B${rowR2}`).value = '';
+        cheatSheet.getCell(`C${rowR2}`).value = `R${num2}`;
         if (hasReader2) {
-            cheatSheet.getCell(`D${rowIdx}`).value = 'Считыватель вых';
-            cheatSheet.getCell(`F${rowIdx}`).value = `ШЛ.${cn2.reader || ''}`;
-            cheatSheet.getCell(`G${rowIdx}`).value = counter++;
+            cheatSheet.getCell(`D${rowR2}`).value = board.plinth2.deviceLabel || 'Считыватель вых';
+            cheatSheet.getCell(`F${rowR2}`).value = `ШЛ.${cn2.reader || ''}`;
+            cheatSheet.getCell(`G${rowR2}`).value = counter++;
         } else {
-            cheatSheet.getCell(`D${rowIdx}`).value = '';
-            cheatSheet.getCell(`F${rowIdx}`).value = '';
-            cheatSheet.getCell(`G${rowIdx}`).value = '';
+            cheatSheet.getCell(`D${rowR2}`).value = '';
+            cheatSheet.getCell(`F${rowR2}`).value = '';
+            cheatSheet.getCell(`G${rowR2}`).value = '';
         }
-        cheatSheet.getCell(`E${rowIdx}`).value = `пом. ${commonRoom}`;
+        cheatSheet.getCell(`E${rowR2}`).value = `пом. ${board.plinth2.room || ''}`;
         rowIdx++;
 
-        // D2
-        cheatSheet.getCell(`A${rowIdx}`).value = '';
-        cheatSheet.getCell(`B${rowIdx}`).value = '';
-        cheatSheet.getCell(`C${rowIdx}`).value = `D${num2}`;
+        const rowD2 = rowIdx;
+        cheatSheet.getCell(`A${rowD2}`).value = '';
+        cheatSheet.getCell(`B${rowD2}`).value = '';
+        cheatSheet.getCell(`C${rowD2}`).value = `D${num2}`;
         if (hasLock2) {
-            cheatSheet.getCell(`D${rowIdx}`).value = 'Замок';
+            cheatSheet.getCell(`D${rowD2}`).value = 'Замок';
         } else if (hasFireLock2) {
-            cheatSheet.getCell(`D${rowIdx}`).value = 'Замок пож.дв.';
+            cheatSheet.getCell(`D${rowD2}`).value = 'Замок пож.дв.';
         } else {
-            cheatSheet.getCell(`D${rowIdx}`).value = '';
+            cheatSheet.getCell(`D${rowD2}`).value = '';
         }
-        cheatSheet.getCell(`E${rowIdx}`).value = `пом. ${commonRoom}`;
-        cheatSheet.getCell(`F${rowIdx}`).value = board.skud2 ? `СКД.${board.skud2}` : '';
+        cheatSheet.getCell(`E${rowD2}`).value = `пом. ${board.plinth2.room || ''}`;
+        cheatSheet.getCell(`F${rowD2}`).value = board.skud2 ? `СКД.${board.skud2}` : '';
         rowIdx++;
+
+        // Заливка для выходного плинта:
+        // - R2: оранжевый, если считыватель вх; красный, если вых
+        // - D2: всегда красный (если считыватель присутствует)
+        if (hasReader2) {
+            // Цвет для R2
+            const fillColorR2 = (board.plinth2.deviceLabel === 'Считыватель вх') ? 'FFA500' : 'FF0000';
+            cheatSheet.getCell(`G${rowR2}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillColorR2 } };
+            // D2 всегда красный
+            cheatSheet.getCell(`G${rowD2}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0000' } };
+        }
+        // если считывателя нет – заливка не применяется
 
         // пустая строка между платами
         rowIdx++;
@@ -581,7 +599,6 @@ app.post('/generate-sv005', async (req, res) => {
         }
         blocks.sort((a, b) => a.startRow - b.startRow);
 
-        // Для SV005 каждая плата даёт 2 блока (вход и выход)
         const neededInput = boards.length;
         const neededOutput = boards.length;
 
@@ -623,37 +640,41 @@ app.post('/generate-sv005', async (req, res) => {
             const board = boards[i];
             const boardNumber = i + 1;
 
+            const plinth1Data = {
+                rack: board.rack,
+                boardNumber: boardNumber,
+                plinthNumber: board.plinth1.number,
+                skud: board.skud1,
+                room: board.plinth1.room,
+                terminalMap: board.plinth1.terminalMap,
+                cableNumbers: board.plinth1.cableNumbers
+            };
             await fillPlinthBlockSV005(
                 worksheet,
                 usedInputBlocks[i].startRow,
                 'input',
-                {
-                    rack: board.rack,
-                    boardNumber: boardNumber,
-                    plinthNumber: board.plinth1.number,
-                    skud: board.skud1,
-                    room: board.plinth1.room,
-                    terminalMap: board.plinth1.terminalMap,
-                    cableNumbers: board.plinth1.cableNumbers
-                },
+                plinth1Data,
                 globalModel
             );
+            board.plinth1.deviceLabel = plinth1Data.deviceLabel;
 
+            const plinth2Data = {
+                rack: board.rack,
+                boardNumber: boardNumber,
+                plinthNumber: board.plinth2.number,
+                skud: board.skud2,
+                room: board.plinth2.room,
+                terminalMap: board.plinth2.terminalMap,
+                cableNumbers: board.plinth2.cableNumbers
+            };
             await fillPlinthBlockSV005(
                 worksheet,
                 usedOutputBlocks[i].startRow,
                 'output',
-                {
-                    rack: board.rack,
-                    boardNumber: boardNumber,
-                    plinthNumber: board.plinth2.number,
-                    skud: board.skud2,
-                    room: board.plinth2.room,
-                    terminalMap: board.plinth2.terminalMap,
-                    cableNumbers: board.plinth2.cableNumbers
-                },
+                plinth2Data,
                 globalModel
             );
+            board.plinth2.deviceLabel = plinth2Data.deviceLabel;
         }
 
         const allBlocks = getBlocksSV005(worksheet);
@@ -678,7 +699,6 @@ app.post('/generate-sv005', async (req, res) => {
 
         createSheetsSV005(workbook, boards, globalModel);
 
-        // Автоподгон ширины столбцов для всех листов (кроме листа с плинтами)
         applyAutoFit(workbook);
 
         const buffer = await workbook.xlsx.writeBuffer();
@@ -780,7 +800,6 @@ app.post('/generate-sv004', async (req, res) => {
 
         createSheetsSV004(workbook, boards, globalModel);
 
-        // Автоподгон ширины столбцов для всех листов (кроме листа с плинтами)
         applyAutoFit(workbook);
 
         const buffer = await workbook.xlsx.writeBuffer();
