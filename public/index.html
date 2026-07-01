@@ -228,8 +228,8 @@
             gap: 6px;
         }
         .terminal {
-            flex: 1 1 60px;
-            min-width: 55px;
+            flex: 1 1 150px;
+            min-width: 140px;
             background: #f4f7fd;
             border-radius: 12px;
             padding: 4px 3px;
@@ -248,15 +248,15 @@
             margin-bottom: 3px;
         }
         .terminal select {
-            width: 100%;
             padding: 2px 4px;
             border-radius: 12px;
             font-size: 0.6rem;
             height: 22px;
             border: 1px solid #ccc;
+            min-width: 50px;
         }
-        .terminal input[type="text"] {
-            width: 100%;
+        .terminal input[type="text"],
+        .terminal input[type="number"] {
             padding: 2px 4px;
             border-radius: 12px;
             font-size: 0.6rem;
@@ -264,19 +264,58 @@
             border: 1px solid #ccc;
             margin-top: 2px;
         }
-        .terminal input.room-pin {
-            width: 40px;
+        .terminal input[type="number"] {
+            width: 35px;
+            display: inline-block;
+        }
+        .terminal input.room-pin,
+        .terminal input.cable-pin {
+            width: 100%;
             margin-top: 2px;
-            padding: 2px;
-            font-size: 0.6rem;
-            border-radius: 8px;
-            border: 1px solid #ccc;
-            text-align: center;
         }
         .terminal-legend {
             font-size: 0.5rem;
             color: #6f7885;
             margin-top: 2px;
+        }
+        /* Стили для SV004: две колонки в одной строке */
+        .terminal .device-row {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+        }
+        .terminal .device-row .devices-col {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            flex: 1;
+            min-width: 0;
+        }
+        .terminal .device-row .devices-col .dev-group {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+        .terminal .device-row .devices-col .dev-group select {
+            flex: 1;
+            min-width: 40px;
+        }
+        .terminal .device-row .devices-col .dev-group input {
+            width: 30px;
+            flex-shrink: 0;
+        }
+        .terminal .device-row .cable-room-col {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            flex: 1;
+            min-width: 0;
+        }
+        .terminal .device-row .cable-room-col input {
+            width: 100%;
+            margin-top: 0;
         }
         .cable-numbers {
             background: #f0f6fe;
@@ -422,12 +461,9 @@
     </div>
     <div id="message"></div>
     <div class="info-note">
-        ▼ Для SV005: два плинта (R1/D1 и R2/D2). Для SV004: один плинт с 10 пинами (0–9).<br>
+        ▼ Для SV005: два плинта (R1/D1 и R2/D2). Для SV004: один плинт с 4 пинами (0–3), на каждом пине можно выбрать до двух устройств (ИК, КАВ, СМК, ДРС) с указанием количества (по умолчанию 1).<br>
         • Нумерация плинтов сквозная по порядку плат: SV005 даёт 2 плинта, SV004 – 1 плинт.<br>
-        • Выберите устройство и введите номер кабеля для каждого пина.<br>
-        • Для SV004 доступны: ИК, КАВ, СМК-ДРС, ИК-СМК.<br>
         • У каждого пина SV004 можно указать свой номер помещения (если не указан, ячейка остаётся пустой).<br>
-        • <strong>Пины 8 и 9 для SV004 не используются</strong> – при тесте они остаются пустыми.<br>
         • Кнопка "Копировать вход → выход" дублирует настройки (только для SV005).
     </div>
 </div>
@@ -448,8 +484,8 @@
         { value: "", label: "не используется" },
         { value: "ИК", label: "ИК" },
         { value: "КАВ", label: "КАВ" },
-        { value: "СМК-ДРС", label: "СМК-ДРС" },
-        { value: "ИК-СМК", label: "ИК-СМК" }
+        { value: "СМК", label: "СМК" },
+        { value: "ДРС", label: "ДРС" }
     ];
 
     // Пресеты для SV005
@@ -573,53 +609,70 @@
     }
 
     // ---------- Создание элементов для SV004 (один плинт) ----------
-function createPlinthElementSV004(side, defaultData, skudValue) {
-    const plinthDiv = document.createElement('div');
-    plinthDiv.className = 'plinth-card';
-    plinthDiv.dataset.side = side || 'R1/D1';
+    // Две колонки: слева устройства, справа кабель и помещение
+    function createPlinthElementSV004(side, defaultData, skudValue) {
+        const plinthDiv = document.createElement('div');
+        plinthDiv.className = 'plinth-card';
+        plinthDiv.dataset.side = side || 'R1/D1';
 
-    const header = document.createElement('div');
-    header.className = 'plinth-header';
-    header.innerHTML = `
-        <span>🔌 Плинт ${side || 'R1/D1'}</span>
-        <span style="font-size:0.7rem; font-weight:normal; color:#666;">пины 0–3</span>
-    `;
-    plinthDiv.appendChild(header);
-
-    const paramsDiv = document.createElement('div');
-    paramsDiv.className = 'plinth-params';
-    paramsDiv.innerHTML = `
-        <div class="plinth-param"><label>Плинтодержатель</label><input type="text" class="holder" readonly style="background:#f0f0f0;" value="${escapeHtml(defaultData.holder)}"></div>
-        <div class="plinth-param"><label>Номер плинта</label><input type="text" class="plinth-number" readonly style="background:#f0f0f0;" value="${escapeHtml(defaultData.plinthNumber)}"></div>
-        <div class="plinth-param"><label>СКУД №</label><input type="text" class="skud" value="${escapeHtml(skudValue)}"></div>
-    `;
-    plinthDiv.appendChild(paramsDiv);
-
-    const terminalRow = document.createElement('div');
-    terminalRow.className = 'terminal-row';
-    const terminalsWrapper = document.createElement('div');
-    terminalsWrapper.className = 'terminals';
-    for (let term = 0; term <= 3; term++) {
-        const termDiv = document.createElement('div');
-        termDiv.className = 'terminal';
-        termDiv.dataset.terminal = term;
-        const selectedVal = defaultData.terminalMap[term] || "";
-        const cableVal = defaultData.cableMap[term] || "";
-        const roomVal = defaultData.roomMap && defaultData.roomMap[term] ? defaultData.roomMap[term] : "";
-        termDiv.innerHTML = `
-            <div class="terminal-num">${term}</div>
-            <select class="device-select">${deviceOptionsSV004.map(opt => `<option value="${opt.value}" ${selectedVal === opt.value ? 'selected' : ''}>${opt.label}</option>`).join('')}</select>
-            <input type="text" class="cable-pin" placeholder="кабель" value="${escapeHtml(cableVal)}">
-            <input type="text" class="room-pin" placeholder="пом." value="${escapeHtml(roomVal)}">
-            <div class="terminal-legend">кл.${term}</div>
+        const header = document.createElement('div');
+        header.className = 'plinth-header';
+        header.innerHTML = `
+            <span>🔌 Плинт ${side || 'R1/D1'}</span>
+            <span style="font-size:0.7rem; font-weight:normal; color:#666;">пины 0–3</span>
         `;
-        terminalsWrapper.appendChild(termDiv);
-    }
-    terminalRow.appendChild(terminalsWrapper);
-    plinthDiv.appendChild(terminalRow);
+        plinthDiv.appendChild(header);
 
-    return plinthDiv;
-}
+        const paramsDiv = document.createElement('div');
+        paramsDiv.className = 'plinth-params';
+        paramsDiv.innerHTML = `
+            <div class="plinth-param"><label>Плинтодержатель</label><input type="text" class="holder" readonly style="background:#f0f0f0;" value="${escapeHtml(defaultData.holder)}"></div>
+            <div class="plinth-param"><label>Номер плинта</label><input type="text" class="plinth-number" readonly style="background:#f0f0f0;" value="${escapeHtml(defaultData.plinthNumber)}"></div>
+            <div class="plinth-param"><label>СКУД №</label><input type="text" class="skud" value="${escapeHtml(skudValue)}"></div>
+        `;
+        plinthDiv.appendChild(paramsDiv);
+
+        const terminalRow = document.createElement('div');
+        terminalRow.className = 'terminal-row';
+        const terminalsWrapper = document.createElement('div');
+        terminalsWrapper.className = 'terminals';
+        for (let term = 0; term <= 3; term++) {
+            const termDiv = document.createElement('div');
+            termDiv.className = 'terminal';
+            termDiv.dataset.terminal = term;
+            const device1 = (defaultData.device1Map && defaultData.device1Map[term]) || "";
+            const device2 = (defaultData.device2Map && defaultData.device2Map[term]) || "";
+            const count1 = (defaultData.count1Map && defaultData.count1Map[term]) || 1;
+            const count2 = (defaultData.count2Map && defaultData.count2Map[term]) || 1;
+            const cableVal = (defaultData.cableMap && defaultData.cableMap[term]) || "";
+            const roomVal = (defaultData.roomMap && defaultData.roomMap[term]) || "";
+            termDiv.innerHTML = `
+                <div class="terminal-num">${term}</div>
+                <div class="device-row">
+                    <div class="devices-col">
+                        <div class="dev-group">
+                            <select class="device-select1">${deviceOptionsSV004.map(opt => `<option value="${opt.value}" ${device1 === opt.value ? 'selected' : ''}>${opt.label}</option>`).join('')}</select>
+                            <input type="number" class="count1" min="1" value="${count1}">
+                        </div>
+                        <div class="dev-group">
+                            <select class="device-select2">${deviceOptionsSV004.map(opt => `<option value="${opt.value}" ${device2 === opt.value ? 'selected' : ''}>${opt.label}</option>`).join('')}</select>
+                            <input type="number" class="count2" min="1" value="${count2}">
+                        </div>
+                    </div>
+                    <div class="cable-room-col">
+                        <input type="text" class="cable-pin" placeholder="кабель" value="${escapeHtml(cableVal)}">
+                        <input type="text" class="room-pin" placeholder="пом." value="${escapeHtml(roomVal)}">
+                    </div>
+                </div>
+                <div class="terminal-legend">кл.${term}</div>
+            `;
+            terminalsWrapper.appendChild(termDiv);
+        }
+        terminalRow.appendChild(terminalsWrapper);
+        plinthDiv.appendChild(terminalRow);
+
+        return plinthDiv;
+    }
 
     // ---------- Функция пересчёта номеров плинтов (сквозная нумерация) ----------
     function renumberBoards() {
@@ -698,7 +751,11 @@ function createPlinthElementSV004(side, defaultData, skudValue) {
                 terminalMap: {},
                 cableNumbers: {},
                 cableMap: {},
-                roomMap: {}
+                roomMap: {},
+                device1Map: {},
+                device2Map: {},
+                count1Map: {},
+                count2Map: {}
             },
             plinth2: {
                 holder: defaultHolder2,
@@ -707,7 +764,11 @@ function createPlinthElementSV004(side, defaultData, skudValue) {
                 terminalMap: {},
                 cableNumbers: {},
                 cableMap: {},
-                roomMap: {}
+                roomMap: {},
+                device1Map: {},
+                device2Map: {},
+                count1Map: {},
+                count2Map: {}
             }
         };
 
@@ -721,6 +782,10 @@ function createPlinthElementSV004(side, defaultData, skudValue) {
                 defaultData.plinth1.cableNumbers = initialData.plinth1.cableNumbers || {};
                 defaultData.plinth1.cableMap = initialData.plinth1.cableMap || {};
                 defaultData.plinth1.roomMap = initialData.plinth1.roomMap || {};
+                defaultData.plinth1.device1Map = initialData.plinth1.device1Map || {};
+                defaultData.plinth1.device2Map = initialData.plinth1.device2Map || {};
+                defaultData.plinth1.count1Map = initialData.plinth1.count1Map || {};
+                defaultData.plinth1.count2Map = initialData.plinth1.count2Map || {};
             }
             if (initialData.plinth2 && plinthCount === 2) {
                 defaultData.plinth2.room = initialData.plinth2.room || "";
@@ -728,6 +793,10 @@ function createPlinthElementSV004(side, defaultData, skudValue) {
                 defaultData.plinth2.cableNumbers = initialData.plinth2.cableNumbers || {};
                 defaultData.plinth2.cableMap = initialData.plinth2.cableMap || {};
                 defaultData.plinth2.roomMap = initialData.plinth2.roomMap || {};
+                defaultData.plinth2.device1Map = initialData.plinth2.device1Map || {};
+                defaultData.plinth2.device2Map = initialData.plinth2.device2Map || {};
+                defaultData.plinth2.count1Map = initialData.plinth2.count1Map || {};
+                defaultData.plinth2.count2Map = initialData.plinth2.count2Map || {};
             }
         }
 
@@ -852,30 +921,58 @@ function createPlinthElementSV004(side, defaultData, skudValue) {
                 const rack = boardDiv.querySelector('.board-rack')?.value?.trim() || '';
                 const plinths = boardDiv.querySelectorAll('.plinth-card');
                 if (plinths.length === 0) {
-                    boards.push({ type: boardType, rack, skud1: '', skud2: '', plinth1: { number: 0, room: '', terminalMap: {}, cableNumbers: {}, cableMap: {}, roomMap: {} }, plinth2: null });
+                    boards.push({ type: boardType, rack, skud1: '', skud2: '', plinth1: { number: 0, room: '', terminalMap: {}, cableNumbers: {}, cableMap: {}, roomMap: {}, device1Map: {}, device2Map: {}, count1Map: {}, count2Map: {} }, plinth2: null });
                     continue;
                 }
                 const plinth1Div = plinths[0];
                 const plinth1Room = boardType === 'SV005' ? (plinth1Div.querySelector('.room-number')?.value?.trim() || '') : '';
                 const plinth1Skud = plinth1Div.querySelector('.skud')?.value?.trim() || '';
                 const plinth1Number = plinth1Div.querySelector('.plinth-number')?.value?.trim() || '0';
-                const plinth1Terminals = plinth1Div.querySelectorAll('.terminal');
-                const terminalMap1 = {}, cableMap1 = {}, roomMap1 = {};
-                plinth1Terminals.forEach(term => {
-                    const termNum = parseInt(term.dataset.terminal, 10);
-                    const device = term.querySelector('.device-select')?.value || '';
-                    if (device && device !== "") terminalMap1[termNum] = device;
-                    const cableInput = term.querySelector('.cable-pin');
-                    if (cableInput) {
-                        const cableVal = cableInput.value.trim();
-                        if (cableVal) cableMap1[termNum] = cableVal;
+                
+                let terminalMap1 = {}, cableMap1 = {}, roomMap1 = {};
+                let device1Map1 = {}, device2Map1 = {}, count1Map1 = {}, count2Map1 = {};
+                if (boardType === 'SV005') {
+                    const plinth1Terminals = plinth1Div.querySelectorAll('.terminal');
+                    plinth1Terminals.forEach(term => {
+                        const termNum = parseInt(term.dataset.terminal, 10);
+                        const device = term.querySelector('.device-select')?.value || '';
+                        if (device && device !== "") terminalMap1[termNum] = device;
+                    });
+                } else {
+                    // SV004
+                    const plinth1Terminals = plinth1Div.querySelectorAll('.terminal');
+                    plinth1Terminals.forEach(term => {
+                        const termNum = parseInt(term.dataset.terminal, 10);
+                        const dev1 = term.querySelector('.device-select1')?.value || '';
+                        const dev2 = term.querySelector('.device-select2')?.value || '';
+                        const cnt1 = parseInt(term.querySelector('.count1')?.value) || 1;
+                        const cnt2 = parseInt(term.querySelector('.count2')?.value) || 1;
+                        const cable = term.querySelector('.cable-pin')?.value?.trim() || '';
+                        const room = term.querySelector('.room-pin')?.value?.trim() || '';
+                        if (dev1) {
+                            device1Map1[termNum] = dev1;
+                            count1Map1[termNum] = cnt1;
+                        }
+                        if (dev2) {
+                            device2Map1[termNum] = dev2;
+                            count2Map1[termNum] = cnt2;
+                        }
+                        if (cable) cableMap1[termNum] = cable;
+                        if (room) roomMap1[termNum] = room;
+                    });
+                    // Формируем terminalMap1 как строки
+                    for (let pin = 0; pin <= 3; pin++) {
+                        let parts = [];
+                        if (device1Map1[pin]) {
+                            parts.push(`${device1Map1[pin]} (${count1Map1[pin] || 1})`);
+                        }
+                        if (device2Map1[pin]) {
+                            parts.push(`${device2Map1[pin]} (${count2Map1[pin] || 1})`);
+                        }
+                        terminalMap1[pin] = parts.join(', ');
                     }
-                    const roomInput = term.querySelector('.room-pin');
-                    if (roomInput) {
-                        const roomVal = roomInput.value.trim();
-                        if (roomVal) roomMap1[termNum] = roomVal;
-                    }
-                });
+                }
+
                 const cableNumbers1 = {};
                 if (boardType === 'SV005') {
                     cableNumbers1.reader = plinth1Div.querySelector('.cable-reader')?.value?.trim() || '';
@@ -885,7 +982,9 @@ function createPlinthElementSV004(side, defaultData, skudValue) {
                     cableNumbers1.exit_btn = plinth1Div.querySelector('.cable-exit_btn')?.value?.trim() || '';
                     cableNumbers1.fire_lock = plinth1Div.querySelector('.cable-fire_lock')?.value?.trim() || '';
                 }
+
                 let plinth2Room = '', plinth2Skud = '', plinth2Number = '0', terminalMap2 = {}, cableMap2 = {}, cableNumbers2 = {}, roomMap2 = {};
+                let device1Map2 = {}, device2Map2 = {}, count1Map2 = {}, count2Map2 = {};
                 if (boardType === 'SV005' && plinths.length > 1) {
                     const plinth2Div = plinths[1];
                     plinth2Room = plinth2Div.querySelector('.room-number')?.value?.trim() || '';
@@ -896,11 +995,6 @@ function createPlinthElementSV004(side, defaultData, skudValue) {
                         const termNum = parseInt(term.dataset.terminal, 10);
                         const device = term.querySelector('.device-select')?.value || '';
                         if (device && device !== "") terminalMap2[termNum] = device;
-                        const cableInput = term.querySelector('.cable-pin');
-                        if (cableInput) {
-                            const cableVal = cableInput.value.trim();
-                            if (cableVal) cableMap2[termNum] = cableVal;
-                        }
                     });
                     cableNumbers2.reader = plinth2Div.querySelector('.cable-reader')?.value?.trim() || '';
                     cableNumbers2.lock = plinth2Div.querySelector('.cable-lock')?.value?.trim() || '';
@@ -909,6 +1003,7 @@ function createPlinthElementSV004(side, defaultData, skudValue) {
                     cableNumbers2.exit_btn = plinth2Div.querySelector('.cable-exit_btn')?.value?.trim() || '';
                     cableNumbers2.fire_lock = plinth2Div.querySelector('.cable-fire_lock')?.value?.trim() || '';
                 }
+
                 boards.push({
                     type: boardType,
                     rack,
@@ -920,7 +1015,11 @@ function createPlinthElementSV004(side, defaultData, skudValue) {
                         terminalMap: terminalMap1,
                         cableNumbers: cableNumbers1,
                         cableMap: cableMap1,
-                        roomMap: roomMap1
+                        roomMap: roomMap1,
+                        device1Map: device1Map1,
+                        device2Map: device2Map1,
+                        count1Map: count1Map1,
+                        count2Map: count2Map1
                     },
                     plinth2: (boardType === 'SV005') ? {
                         number: parseInt(plinth2Number, 10) || 0,
@@ -928,7 +1027,11 @@ function createPlinthElementSV004(side, defaultData, skudValue) {
                         terminalMap: terminalMap2,
                         cableNumbers: cableNumbers2,
                         cableMap: cableMap2,
-                        roomMap: {}
+                        roomMap: roomMap2,
+                        device1Map: device1Map2,
+                        device2Map: device2Map2,
+                        count1Map: count1Map2,
+                        count2Map: count2Map2
                     } : null
                 });
             } catch (e) {
@@ -937,7 +1040,7 @@ function createPlinthElementSV004(side, defaultData, skudValue) {
                     type: boardDiv.dataset.boardType || 'SV005',
                     rack: boardDiv.querySelector('.board-rack')?.value?.trim() || '',
                     skud1: '', skud2: '',
-                    plinth1: { number: 0, room: '', terminalMap: {}, cableNumbers: {}, cableMap: {}, roomMap: {} },
+                    plinth1: { number: 0, room: '', terminalMap: {}, cableNumbers: {}, cableMap: {}, roomMap: {}, device1Map: {}, device2Map: {}, count1Map: {}, count2Map: {} },
                     plinth2: null
                 });
             }
@@ -992,28 +1095,35 @@ function createPlinthElementSV004(side, defaultData, skudValue) {
                         if (inp) inp.value = Math.floor(Math.random() * 900 + 100);
                     });
                 } else {
-                    // SV004: заполняем только пины 0-7, пины 8-9 оставляем пустыми
-                    selects.forEach((sel, i) => {
-                        if (i < 8) {
-                            const devices = ['ИК', 'КАВ', 'СМК-ДРС', 'ИК-СМК'];
+                    // SV004
+                    const devices = ['ИК', 'КАВ', 'СМК', 'ДРС'];
+                    const select1s = plinth.querySelectorAll('.device-select1');
+                    const select2s = plinth.querySelectorAll('.device-select2');
+                    const count1s = plinth.querySelectorAll('.count1');
+                    const count2s = plinth.querySelectorAll('.count2');
+                    const cableInputs2 = plinth.querySelectorAll('.cable-pin');
+                    const roomPins2 = plinth.querySelectorAll('.room-pin');
+                    select1s.forEach((sel, i) => {
+                        if (i < 4) {
                             sel.value = devices[i % devices.length];
-                        } else {
-                            sel.value = '';
                         }
                     });
-                    cableInputs.forEach((inp, i) => {
-                        if (i < 8) {
-                            inp.value = Math.floor(Math.random() * 900 + 100);
-                        } else {
-                            inp.value = '';
+                    select2s.forEach((sel, i) => {
+                        if (i < 4) {
+                            sel.value = devices[(i+1) % devices.length];
                         }
                     });
-                    roomPins.forEach((inp, i) => {
-                        if (i < 8) {
-                            inp.value = Math.floor(Math.random() * 900 + 100);
-                        } else {
-                            inp.value = '';
-                        }
+                    count1s.forEach((inp, i) => {
+                        if (i < 4) inp.value = Math.floor(Math.random() * 3) + 1;
+                    });
+                    count2s.forEach((inp, i) => {
+                        if (i < 4) inp.value = Math.floor(Math.random() * 3) + 1;
+                    });
+                    cableInputs2.forEach((inp, i) => {
+                        if (i < 4) inp.value = Math.floor(Math.random() * 900 + 100);
+                    });
+                    roomPins2.forEach((inp, i) => {
+                        if (i < 4) inp.value = Math.floor(Math.random() * 900 + 100);
                     });
                 }
                 const room = plinth.querySelector('.room-number');
