@@ -767,7 +767,7 @@ app.post('/generate-sv005', async (req, res) => {
 
         const filePath = saveFileToNetwork(buffer, filename, address);
 
-        // ---------- ИСПРАВЛЕННЫЙ ЗАГОЛОВОК: только filename*= ----------
+        // Используем RFC 5987 для корректной передачи имени с русскими буквами
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
         res.setHeader('X-File-Path', encodeURIComponent(filePath));
@@ -875,7 +875,6 @@ app.post('/generate-sv004', async (req, res) => {
 
         const filePath = saveFileToNetwork(buffer, filename, address);
 
-        // ---------- ИСПРАВЛЕННЫЙ ЗАГОЛОВОК: только filename*= ----------
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
         res.setHeader('X-File-Path', encodeURIComponent(filePath));
