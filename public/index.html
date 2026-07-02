@@ -202,31 +202,7 @@
         }
         .board-params {
             padding: 10px 18px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            background: #f0f6fe;
-            border-bottom: 1px solid #c0d4e8;
-        }
-        .board-param {
-            flex: 1;
-            min-width: 120px;
-        }
-        .board-param label {
-            font-size: 0.6rem;
-            text-transform: uppercase;
-            font-weight: 600;
-            color: #2c5282;
-            display: block;
-        }
-        .board-param input {
-            width: 100%;
-            padding: 4px 8px;
-            border-radius: 14px;
-            border: 1px solid #bdd4e7;
-            margin-top: 2px;
-            font-size: 0.85rem;
-            height: 28px;
+            display: none; /* скрываем, так как стойка теперь общая */
         }
         .plinth-container {
             display: flex;
@@ -610,6 +586,11 @@
             <label>🏠 Помещение (общее)</label>
             <input type="text" id="globalRoom" placeholder="" style="width:100px;">
         </div>
+        <!-- НОВОЕ ПОЛЕ: общая стойка -->
+        <div class="field">
+            <label>Стойка ХК</label>
+            <input type="text" id="globalRack" value="ХК" style="width:100px;">
+        </div>
         <div class="field">
             <label>Тип платы</label>
             <select id="boardType" class="board-type-select">
@@ -874,9 +855,10 @@
         return plinthDiv;
     }
 
-    // ---------- Функция пересчёта номеров плинтов (для всех плат) ----------
+    // ---------- Функция пересчёта номеров плинтов (использует глобальную стойку) ----------
     function renumberBoards() {
         const boardDivs = document.querySelectorAll('.board-card');
+        const globalRack = document.getElementById('globalRack').value.trim() || 'ХК';
         let nextPlinthNumber = 1;
         boardDivs.forEach((board, idx) => {
             board.dataset.boardIndex = idx;
@@ -886,21 +868,19 @@
             headerSpan.innerText = `🔧 Плата ${boardType} №${boardNumber}`;
             
             const plinths = board.querySelectorAll('.plinth-card');
-            const rack = board.querySelector('.board-rack').value.trim();
             
             const plinth1Div = plinths[0];
             const plinth1Number = nextPlinthNumber++;
             const plinth1NumInput = plinth1Div.querySelector('.plinth-number');
             plinth1NumInput.value = plinth1Number;
-            updateHolderForPlinth(plinth1Div, rack, plinth1Number);
+            updateHolderForPlinth(plinth1Div, globalRack, plinth1Number);
             
-            // Второй плинт всегда есть (для обоих типов)
             if (plinths.length > 1) {
                 const plinth2Div = plinths[1];
                 const plinth2Number = nextPlinthNumber++;
                 const plinth2NumInput = plinth2Div.querySelector('.plinth-number');
                 plinth2NumInput.value = plinth2Number;
-                updateHolderForPlinth(plinth2Div, rack, plinth2Number);
+                updateHolderForPlinth(plinth2Div, globalRack, plinth2Number);
             }
         });
 
@@ -928,19 +908,17 @@
         document.getElementById('totalCount').textContent = boards.length;
     }
 
-    // ---------- Создание платы (всегда с двумя плинтами) ----------
+    // ---------- Создание платы (без отдельного поля стойки) ----------
     function createBoard(boardIndex, initialData = null, collapsed = true, boardType = 'SV005') {
         const boardNumber = boardIndex + 1;
-        const defaultRack = "ХК";
+        const defaultRack = document.getElementById('globalRack').value.trim() || 'ХК';
 
         // Всегда 2 плинта
-        const plinthCount = 2;
-
         const defaultHolder1 = buildHolder(defaultRack, 0);
         const defaultHolder2 = buildHolder(defaultRack, 0);
 
         let defaultData = {
-            rack: defaultRack,
+            rack: defaultRack, // используется только для инициализации, но поле rack больше не выводится
             skud1: "",
             skud2: "",
             plinth1: {
@@ -972,7 +950,6 @@
         };
 
         if (initialData) {
-            if (initialData.rack) defaultData.rack = initialData.rack;
             if (initialData.skud1 !== undefined) defaultData.skud1 = initialData.skud1;
             if (initialData.skud2 !== undefined) defaultData.skud2 = initialData.skud2;
             if (initialData.plinth1) {
@@ -986,7 +963,7 @@
                 defaultData.plinth1.count1Map = initialData.plinth1.count1Map || {};
                 defaultData.plinth1.count2Map = initialData.plinth1.count2Map || {};
             }
-            if (initialData.plinth2 && plinthCount === 2) {
+            if (initialData.plinth2) {
                 defaultData.plinth2.room = initialData.plinth2.room || "";
                 defaultData.plinth2.terminalMap = initialData.plinth2.terminalMap || {};
                 defaultData.plinth2.cableNumbers = initialData.plinth2.cableNumbers || {};
@@ -1017,12 +994,8 @@
         `;
         boardDiv.appendChild(header);
 
-        const boardParams = document.createElement('div');
-        boardParams.className = 'board-params';
-        boardParams.innerHTML = `
-            <div class="board-param"><label>Стойка ХК</label><input type="text" class="board-rack" value="${escapeHtml(defaultData.rack)}"></div>
-        `;
-        boardDiv.appendChild(boardParams);
+        // Убираем board-params, так как стойка теперь общая
+        // Можно оставить пустой div, но мы его просто не создаём
 
         const plinthsContainer = document.createElement('div');
         plinthsContainer.className = 'plinth-container';
@@ -1042,7 +1015,7 @@
         const toggleBtn = header.querySelector('.toggle-board-btn');
         const boardContent = document.createElement('div');
         boardContent.className = 'board-content';
-        boardContent.appendChild(boardParams);
+        // boardContent.appendChild(boardParams); // больше нет
         boardContent.appendChild(plinthsContainer);
         boardDiv.appendChild(boardContent);
 
@@ -1064,18 +1037,6 @@
             }
         });
 
-        const updateAllHolders = () => {
-            const rack = boardDiv.querySelector('.board-rack').value.trim();
-            const plinth1Num = plinth1Div.querySelector('.plinth-number').value;
-            updateHolderForPlinth(plinth1Div, rack, plinth1Num);
-            if (plinth2Div) {
-                const plinth2Num = plinth2Div.querySelector('.plinth-number').value;
-                updateHolderForPlinth(plinth2Div, rack, plinth2Num);
-            }
-        };
-        const rackInput = boardDiv.querySelector('.board-rack');
-        rackInput.addEventListener('input', updateAllHolders);
-
         const delBtn = header.querySelector('.delete-board-btn');
         delBtn.addEventListener('click', () => {
             boardDiv.remove();
@@ -1085,20 +1046,20 @@
         return boardDiv;
     }
 
-    // ---------- Сбор данных (с учётом двух плинтов для SV004) ----------
+    // ---------- Сбор данных (rack берётся из глобального поля) ----------
     function collectData() {
         const address = document.getElementById('address').value.trim();
         const globalModel = document.getElementById('globalModelSelect').value;
+        const globalRack = document.getElementById('globalRack').value.trim() || 'ХК';
         const boards = [];
         const boardDivs = document.querySelectorAll('.board-card');
         for (let i = 0; i < boardDivs.length; i++) {
             const boardDiv = boardDivs[i];
             try {
                 const boardType = boardDiv.dataset.boardType || 'SV005';
-                const rack = boardDiv.querySelector('.board-rack')?.value?.trim() || '';
                 const plinths = boardDiv.querySelectorAll('.plinth-card');
                 if (plinths.length === 0) {
-                    boards.push({ type: boardType, rack, skud1: '', skud2: '', plinth1: { number: 0, room: '', terminalMap: {}, cableNumbers: {}, cableMap: {}, roomMap: {}, device1Map: {}, device2Map: {}, count1Map: {}, count2Map: {} }, plinth2: null });
+                    boards.push({ type: boardType, rack: globalRack, skud1: '', skud2: '', plinth1: { number: 0, room: '', terminalMap: {}, cableNumbers: {}, cableMap: {}, roomMap: {}, device1Map: {}, device2Map: {}, count1Map: {}, count2Map: {} }, plinth2: null });
                     continue;
                 }
                 const plinth1Div = plinths[0];
@@ -1160,7 +1121,6 @@
 
                 let plinth2Room = '', plinth2Skud = '', plinth2Number = '0', terminalMap2 = {}, cableMap2 = {}, cableNumbers2 = {}, roomMap2 = {};
                 let device1Map2 = {}, device2Map2 = {}, count1Map2 = {}, count2Map2 = {};
-                // Второй плинт всегда есть (для обоих типов)
                 if (plinths.length > 1) {
                     const plinth2Div = plinths[1];
                     if (boardType === 'SV005') {
@@ -1213,7 +1173,7 @@
 
                 boards.push({
                     type: boardType,
-                    rack,
+                    rack: globalRack,
                     skud1: plinth1Skud,
                     skud2: (plinths.length > 1) ? plinth2Skud : '',
                     plinth1: {
@@ -1245,7 +1205,7 @@
                 console.warn('Ошибка при сборе данных платы #' + i, e);
                 boards.push({
                     type: boardDiv.dataset.boardType || 'SV005',
-                    rack: boardDiv.querySelector('.board-rack')?.value?.trim() || '',
+                    rack: globalRack,
                     skud1: '', skud2: '',
                     plinth1: { number: 0, room: '', terminalMap: {}, cableNumbers: {}, cableMap: {}, roomMap: {}, device1Map: {}, device2Map: {}, count1Map: {}, count2Map: {} },
                     plinth2: null
@@ -1337,8 +1297,7 @@
                 const skud = plinth.querySelector('.skud');
                 if (skud) skud.value = `${idx+1}.${pIdx+1}`;
             });
-            const rackInput = board.querySelector('.board-rack');
-            if (rackInput) rackInput.value = 'ХК' + (idx+1);
+            // Стойка больше не устанавливается индивидуально
         });
         showMessage('Тестовые данные заполнены', 'success');
     }
@@ -1742,6 +1701,12 @@
         if (e.target === this) {
             this.classList.remove('active');
         }
+    });
+
+    // ---------- Обработчик изменения глобальной стойки ----------
+    document.getElementById('globalRack').addEventListener('input', function() {
+        // пересчитываем holder для всех плат
+        renumberBoards();
     });
 
     // ---------- Поиск проектов через API ----------
