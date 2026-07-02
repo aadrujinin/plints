@@ -586,7 +586,6 @@
             <label>🏠 Помещение (общее)</label>
             <input type="text" id="globalRoom" placeholder="" style="width:100px;">
         </div>
-        <!-- НОВОЕ ПОЛЕ: общая стойка -->
         <div class="field">
             <label>Стойка ХК</label>
             <input type="text" id="globalRack" value="ХК" style="width:100px;">
@@ -918,7 +917,7 @@
         const defaultHolder2 = buildHolder(defaultRack, 0);
 
         let defaultData = {
-            rack: defaultRack, // используется только для инициализации, но поле rack больше не выводится
+            rack: defaultRack,
             skud1: "",
             skud2: "",
             plinth1: {
@@ -995,7 +994,6 @@
         boardDiv.appendChild(header);
 
         // Убираем board-params, так как стойка теперь общая
-        // Можно оставить пустой div, но мы его просто не создаём
 
         const plinthsContainer = document.createElement('div');
         plinthsContainer.className = 'plinth-container';
@@ -1015,7 +1013,6 @@
         const toggleBtn = header.querySelector('.toggle-board-btn');
         const boardContent = document.createElement('div');
         boardContent.className = 'board-content';
-        // boardContent.appendChild(boardParams); // больше нет
         boardContent.appendChild(plinthsContainer);
         boardDiv.appendChild(boardContent);
 
@@ -1297,7 +1294,6 @@
                 const skud = plinth.querySelector('.skud');
                 if (skud) skud.value = `${idx+1}.${pIdx+1}`;
             });
-            // Стойка больше не устанавливается индивидуально
         });
         showMessage('Тестовые данные заполнены', 'success');
     }
@@ -1535,21 +1531,16 @@
             showMessage(`Нет плат типа ${targetType}`, 'error');
             return;
         }
+        // Проверяем только наличие стойки (она общая) – для всех типов
         for (let i = 0; i < filteredBoards.length; i++) {
             const b = filteredBoards[i];
             if (!b.rack) {
                 showMessage(`Заполните стойку для платы №${i+1}`, 'error');
                 return;
             }
-            if (targetType === 'SV005' && !b.plinth1.room) {
-                showMessage(`Заполните помещение для первого плинта платы №${i+1}`, 'error');
-                return;
-            }
-            if (targetType === 'SV005' && (!b.plinth2 || !b.plinth2.room)) {
-                showMessage(`Заполните помещение для второго плинта платы №${i+1}`, 'error');
-                return;
-            }
+            // Убраны проверки на room для SV005 – теперь аналогично SV004
         }
+        // Валидация для SV005 (количество устройств) – оставляем
         if (targetType === 'SV005') {
             const validationError = validateBoardsSV005(filteredBoards);
             if (validationError) {
@@ -1705,7 +1696,6 @@
 
     // ---------- Обработчик изменения глобальной стойки ----------
     document.getElementById('globalRack').addEventListener('input', function() {
-        // пересчитываем holder для всех плат
         renumberBoards();
     });
 

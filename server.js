@@ -67,7 +67,6 @@ function getCellText(cell) {
             return cell.value.richText.map(rt => rt.text).join('');
         }
         if (cell.value.text) return cell.value.text;
-        // если есть result (формула) – берём его
         if (cell.value.result !== undefined && cell.value.result !== null) {
             return String(cell.value.result);
         }
@@ -76,7 +75,6 @@ function getCellText(cell) {
     return String(cell.value);
 }
 
-// Безопасное извлечение числового значения из ячейки (поддержка формул)
 function getNumericCellValue(cell) {
     if (!cell) return NaN;
     let val = cell.value;
@@ -216,7 +214,7 @@ function getBlocksSV005(worksheet) {
     return blocks;
 }
 
-// ---------- Блоки для SV004 (исправлено) ----------
+// ---------- Блоки для SV004 ----------
 function getBlocksSV004(worksheet) {
     if (!worksheet) return [];
     const blocks = [];
@@ -225,7 +223,6 @@ function getBlocksSV004(worksheet) {
         const cellE = worksheet.getCell(`E${row}`);
         const text = getCellText(cellE);
         if (text.trim() === 'Стойка') {
-            // Ищем строку "Номер плинта" для получения номера
             let plinthNum = NaN;
             for (let offset = 1; offset <= 10; offset++) {
                 const checkRow = row + offset;
@@ -259,7 +256,7 @@ function getBlocksSV004(worksheet) {
     return blocks;
 }
 
-// ---------- Заполнение блока SV005 ----------
+// ---------- Заполнение блока SV005 (с поддержкой "Резерв") ----------
 async function fillPlinthBlockSV005(worksheet, startRow, blockType, plinthData, globalModel) {
     function findRowWithLabel(labelPart) {
         for (let r = startRow; r <= startRow + 15; r++) {
@@ -330,6 +327,10 @@ async function fillPlinthBlockSV005(worksheet, startRow, blockType, plinthData, 
     const tm = plinthData.terminalMap || {};
     const cn = plinthData.cableNumbers || {};
 
+    // Проверяем, есть ли хоть одно устройство
+    const hasDevices = Object.values(tm).some(v => v && v !== '');
+    const roomText = hasDevices ? (plinthData.room || '') : 'Резерв';
+
     const hasReader = Object.values(tm).includes('reader');
     let deviceLabel = '';
     if (hasReader) {
@@ -377,6 +378,7 @@ async function fillPlinthBlockSV005(worksheet, startRow, blockType, plinthData, 
     worksheet.getCell(`L${devicesRow}`).value = hasSiren ? 'сирена' : '';
     worksheet.getCell(`M${devicesRow}`).value = hasSiren ? (cn.siren || '') : '';
 
+    // Заполняем ячейку помещения
     let roomRow = null;
     for (let r = devicesRow; r <= devicesRow + 5; r++) {
         const cell = worksheet.getCell(`B${r}`);
@@ -387,13 +389,13 @@ async function fillPlinthBlockSV005(worksheet, startRow, blockType, plinthData, 
         }
     }
     if (roomRow) {
-        worksheet.getCell(`B${roomRow}`).value = `пом. ${plinthData.room}`;
+        worksheet.getCell(`B${roomRow}`).value = roomText ? `пом. ${roomText}` : '';
     } else {
-        worksheet.getCell(`B${devicesRow + 1}`).value = `пом. ${plinthData.room}`;
+        worksheet.getCell(`B${devicesRow + 1}`).value = roomText ? `пом. ${roomText}` : '';
     }
 }
 
-// ---------- Заполнение блока SV004 (один плинт) ----------
+// ---------- Заполнение блока SV004 (с поддержкой "Резерв" для неиспользуемых пинов) ----------
 async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel) {
     const groups = [
         { offsetDev: 14, offsetRoom: 15, pins: [0,1,2,3] }
@@ -436,21 +438,34 @@ async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel
             const colCable = ['D','H','L','P'][i];
             const device = tm[pin] || '';
             const cable = cm[pin] || '';
-            const room = (rm[pin] && rm[pin].trim()) ? rm[pin] : '';
+            let room = (rm[pin] && rm[pin].trim()) ? rm[pin] : '';
+
+            // Если устройство не выбрано, помечаем как "Резерв"
+            if (!device) {
+                room = 'Резерв';
+            }
 
             worksheet.getCell(`${colDevice}${devRow}`).value = device;
             worksheet.getCell(`${colCable}${devRow}`).value = cable;
 
-            worksheet.getCell(`${colDevice}${roomRow}`).value = room ? 'пом.' : '';
-            worksheet.getCell(`${colCable}${roomRow}`).value = room ? room : '';
+            // Заполняем ячейки помещения
+            if (room === 'Резерв') {
+                worksheet.getCell(`${colDevice}${roomRow}`).value = 'Резерв';
+                worksheet.getCell(`${colCable}${roomRow}`).value = '';
+            } else if (room) {
+                worksheet.getCell(`${colDevice}${roomRow}`).value = 'пом.';
+                worksheet.getCell(`${colCable}${roomRow}`).value = room;
+            } else {
+                worksheet.getCell(`${colDevice}${roomRow}`).value = '';
+                worksheet.getCell(`${colCable}${roomRow}`).value = '';
+            }
         }
     }
 }
 
-// ---------- Заполнение листов шпоргалка и Disp для SV004 (с учетом обоих плинтов) ----------
+// ---------- Заполнение листов шпоргалка и Disp для SV004 (всегда добавляем строки для всех пинов) ----------
 function fillSheetsSV004(workbook, boards, globalModel) {
     const maxPlinthsPerController = 16;
-    // Собираем все плинты (входные и выходные) в один массив
     const allPlinths = [];
     boards.forEach((board, idx) => {
         allPlinths.push({ boardIndex: idx, plinth: board.plinth1, type: 'input' });
@@ -474,7 +489,6 @@ function fillSheetsSV004(workbook, boards, globalModel) {
         const cheatSheet = workbook.getWorksheet(cheatSheetName);
         const dispSheet = workbook.getWorksheet(dispSheetName);
 
-        // Очищаем содержимое ячеек (не удаляем строки)
         const cheatLastRow = cheatSheet.rowCount;
         for (let r = 4; r <= cheatLastRow; r++) {
             for (let col = 1; col <= 7; col++) {
@@ -488,29 +502,31 @@ function fillSheetsSV004(workbook, boards, globalModel) {
             }
         }
 
-        // Заполняем шпоргалку
         let rowIdx = 4;
         let counter = 1;
         for (let i = 0; i < groupPlinths.length; i++) {
             const plinthData = groupPlinths[i].plinth;
-            const plinthNumber = plinthData.number;   // используем номер плинта
+            const plinthNumber = plinthData.number;
             const tm = plinthData.terminalMap || {};
             const cm = plinthData.cableMap || {};
             const rm = plinthData.roomMap || {};
             for (let pin = 0; pin <= 3; pin++) {
                 const device = tm[pin] || '';
                 const cable = cm[pin] || '';
-                const room = (rm[pin] && rm[pin].trim()) ? rm[pin] : '';
-                if (device) {
-                    cheatSheet.getCell(`A${rowIdx}`).value = '';
-                    cheatSheet.getCell(`B${rowIdx}`).value = plinthNumber;
-                    cheatSheet.getCell(`C${rowIdx}`).value = `Пин${pin}`;
-                    cheatSheet.getCell(`D${rowIdx}`).value = device;
-                    cheatSheet.getCell(`E${rowIdx}`).value = room ? `пом. ${room}` : '';
-                    cheatSheet.getCell(`F${rowIdx}`).value = cable ? `ШЛ.${cable}` : '';
-                    cheatSheet.getCell(`G${rowIdx}`).value = counter++;
-                    rowIdx++;
+                let room = (rm[pin] && rm[pin].trim()) ? rm[pin] : '';
+                // Если устройство не выбрано, ставим "Резерв"
+                if (!device) {
+                    room = 'Резерв';
                 }
+                // Всегда добавляем строку, даже если device пустой
+                cheatSheet.getCell(`A${rowIdx}`).value = '';
+                cheatSheet.getCell(`B${rowIdx}`).value = plinthNumber;
+                cheatSheet.getCell(`C${rowIdx}`).value = `Пин${pin}`;
+                cheatSheet.getCell(`D${rowIdx}`).value = device;
+                cheatSheet.getCell(`E${rowIdx}`).value = room ? (room === 'Резерв' ? 'Резерв' : `пом. ${room}`) : '';
+                cheatSheet.getCell(`F${rowIdx}`).value = cable ? `ШЛ.${cable}` : '';
+                cheatSheet.getCell(`G${rowIdx}`).value = counter++;
+                rowIdx++;
             }
             rowIdx++; // пустая строка между плинтами
         }
@@ -536,11 +552,18 @@ function fillSheetsSV004(workbook, boards, globalModel) {
         leftData.forEach((item, index) => {
             const row = dispRow + index;
             let roomNum = '';
-            if (item.e && typeof item.e === 'string' && item.e.startsWith('пом. ')) {
-                roomNum = item.e.substring(5).trim();
+            let displayText = '';
+            if (item.e && typeof item.e === 'string') {
+                if (item.e === 'Резерв') {
+                    displayText = 'Резерв';
+                } else if (item.e.startsWith('пом. ')) {
+                    roomNum = item.e.substring(5).trim();
+                }
             }
             const deviceText = item.d ? String(item.d) : '';
-            const displayText = roomNum ? `п.${roomNum} - ${deviceText}` : deviceText;
+            if (!displayText) {
+                displayText = roomNum ? `п.${roomNum} - ${deviceText}` : deviceText;
+            }
             const num = item.g ? String(item.g) : String(index + 1);
             dispSheet.getCell(`B${row}`).value = num;
             dispSheet.getCell(`C${row}`).value = displayText;
@@ -551,11 +574,18 @@ function fillSheetsSV004(workbook, boards, globalModel) {
         rightData.forEach((item, index) => {
             const row = dispRow + index;
             let roomNum = '';
-            if (item.e && typeof item.e === 'string' && item.e.startsWith('пом. ')) {
-                roomNum = item.e.substring(5).trim();
+            let displayText = '';
+            if (item.e && typeof item.e === 'string') {
+                if (item.e === 'Резерв') {
+                    displayText = 'Резерв';
+                } else if (item.e.startsWith('пом. ')) {
+                    roomNum = item.e.substring(5).trim();
+                }
             }
             const deviceText = item.d ? String(item.d) : '';
-            const displayText = roomNum ? `п.${roomNum} - ${deviceText}` : deviceText;
+            if (!displayText) {
+                displayText = roomNum ? `п.${roomNum} - ${deviceText}` : deviceText;
+            }
             const num = item.g ? String(item.g) : String(17 + index);
             dispSheet.getCell(`F${row}`).value = num;
             dispSheet.getCell(`G${row}`).value = displayText;
@@ -567,7 +597,7 @@ function fillSheetsSV004(workbook, boards, globalModel) {
     }
 }
 
-// ---------- Создание листов "шпоргалка" и "Шпора общая" для SV005 ----------
+// ---------- Создание листов "шпоргалка" и "Шпора общая" для SV005 (всегда добавляем строки для каждого плинта) ----------
 function createSheetsSV005(workbook, boards, globalModel) {
     const sheetNames = workbook.worksheets.map(s => s.name);
     if (sheetNames.includes('шпоргалка')) workbook.removeWorksheet('шпоргалка');
@@ -595,6 +625,7 @@ function createSheetsSV005(workbook, boards, globalModel) {
         const hasLock1 = Object.values(tm1).includes('lock');
         const hasFireLock1 = Object.values(tm1).includes('fire_lock');
 
+        // R1 строка – всегда
         const rowR1 = rowIdx;
         cheatSheet.getCell(`A${rowR1}`).value = '';
         cheatSheet.getCell(`B${rowR1}`).value = boardNumber;
@@ -608,9 +639,17 @@ function createSheetsSV005(workbook, boards, globalModel) {
             cheatSheet.getCell(`F${rowR1}`).value = '';
             cheatSheet.getCell(`G${rowR1}`).value = '';
         }
-        cheatSheet.getCell(`E${rowR1}`).value = `пом. ${commonRoom}`;
+        // E – помещение или Резерв
+        if (commonRoom) {
+            cheatSheet.getCell(`E${rowR1}`).value = `пом. ${commonRoom}`;
+        } else {
+            // Проверяем, есть ли устройства на этом плинте
+            const hasAnyDevice1 = Object.values(tm1).some(v => v && v !== '');
+            cheatSheet.getCell(`E${rowR1}`).value = hasAnyDevice1 ? '' : 'Резерв';
+        }
         rowIdx++;
 
+        // D1 строка – всегда
         const rowD1 = rowIdx;
         cheatSheet.getCell(`A${rowD1}`).value = '';
         cheatSheet.getCell(`B${rowD1}`).value = '';
@@ -622,12 +661,20 @@ function createSheetsSV005(workbook, boards, globalModel) {
         } else {
             cheatSheet.getCell(`D${rowD1}`).value = '';
         }
-        cheatSheet.getCell(`E${rowD1}`).value = `пом. ${commonRoom}`;
+        // E – помещение или Резерв
+        if (commonRoom) {
+            cheatSheet.getCell(`E${rowD1}`).value = `пом. ${commonRoom}`;
+        } else {
+            const hasAnyDevice1 = Object.values(tm1).some(v => v && v !== '');
+            cheatSheet.getCell(`E${rowD1}`).value = hasAnyDevice1 ? '' : 'Резерв';
+        }
         cheatSheet.getCell(`F${rowD1}`).value = board.skud1 ? `СКД.${board.skud1}` : '';
         rowIdx++;
 
-        cheatSheet.mergeCells(`G${rowR1}:G${rowD1}`);
-        cheatSheet.getCell(`G${rowR1}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0000' } };
+        if (hasReader1 || hasLock1 || hasFireLock1) {
+            cheatSheet.mergeCells(`G${rowR1}:G${rowD1}`);
+            cheatSheet.getCell(`G${rowR1}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0000' } };
+        }
 
         // ----- Выходной плинт (R2/D2) -----
         const tm2 = board.plinth2.terminalMap || {};
@@ -649,7 +696,13 @@ function createSheetsSV005(workbook, boards, globalModel) {
             cheatSheet.getCell(`F${rowR2}`).value = '';
             cheatSheet.getCell(`G${rowR2}`).value = '';
         }
-        cheatSheet.getCell(`E${rowR2}`).value = `пом. ${board.plinth2.room || ''}`;
+        const room2 = board.plinth2.room || '';
+        if (room2) {
+            cheatSheet.getCell(`E${rowR2}`).value = `пом. ${room2}`;
+        } else {
+            const hasAnyDevice2 = Object.values(tm2).some(v => v && v !== '');
+            cheatSheet.getCell(`E${rowR2}`).value = hasAnyDevice2 ? '' : 'Резерв';
+        }
         rowIdx++;
 
         const rowD2 = rowIdx;
@@ -663,7 +716,12 @@ function createSheetsSV005(workbook, boards, globalModel) {
         } else {
             cheatSheet.getCell(`D${rowD2}`).value = '';
         }
-        cheatSheet.getCell(`E${rowD2}`).value = `пом. ${board.plinth2.room || ''}`;
+        if (room2) {
+            cheatSheet.getCell(`E${rowD2}`).value = `пом. ${room2}`;
+        } else {
+            const hasAnyDevice2 = Object.values(tm2).some(v => v && v !== '');
+            cheatSheet.getCell(`E${rowD2}`).value = hasAnyDevice2 ? '' : 'Резерв';
+        }
         cheatSheet.getCell(`F${rowD2}`).value = board.skud2 ? `СКД.${board.skud2}` : '';
         rowIdx++;
 
@@ -673,7 +731,7 @@ function createSheetsSV005(workbook, boards, globalModel) {
             cheatSheet.getCell(`G${rowD2}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0000' } };
         }
 
-        rowIdx++;
+        rowIdx++; // пустая строка между платами
     }
 
     const commonSheet = workbook.addWorksheet('Шпора общая', { properties: { tabColor: { argb: 'FFE0E0FF' } } });
@@ -693,7 +751,7 @@ function createSheetsSV005(workbook, boards, globalModel) {
     }
 }
 
-// ---------- ИСПРАВЛЕННАЯ ФУНКЦИЯ: удаление префикса с учётом кавычек ----------
+// ---------- Очистка адреса ----------
 function extractAddressPart(fullName) {
     if (!fullName) return '';
     let address = fullName;
@@ -723,7 +781,7 @@ function extractAddressPart(fullName) {
     return address;
 }
 
-// ---------- Вспомогательная функция для сохранения файла на сетевой путь ----------
+// ---------- Сохранение файла ----------
 function saveFileToNetwork(buffer, fileName, projectName) {
     const safeProjectName = projectName.replace(/[\\/:*?"<>|]/g, '_');
     const basePath = '//fileserver/!_Work/for Druzhinin Anton/vhd/Расшивки';
@@ -738,7 +796,7 @@ function saveFileToNetwork(buffer, fileName, projectName) {
     return fullPath;
 }
 
-// ---------- Маршрут для SV005 ----------
+// ---------- Маршрут SV005 ----------
 app.post('/generate-sv005', async (req, res) => {
     try {
         const { address, globalModel, boards } = req.body;
@@ -871,7 +929,6 @@ app.post('/generate-sv005', async (req, res) => {
         const buffer = await workbook.xlsx.writeBuffer();
 
         const addressPart = extractAddressPart(address);
-        console.log('🧹 addressPart после очистки (SV005):', addressPart);
         const safeAddress = addressPart.replace(/[\\/:*?"<>|]/g, '_');
         const dateStr = new Date().toISOString().slice(0, 10);
         const filename = `${safeAddress}_${dateStr}_SV005.xlsx`;
@@ -888,7 +945,7 @@ app.post('/generate-sv005', async (req, res) => {
     }
 });
 
-// ---------- МАРШРУТ ДЛЯ SV004 (используем два блока: входной и выходной) ----------
+// ---------- Маршрут SV004 ----------
 app.post('/generate-sv004', async (req, res) => {
     try {
         const { address, globalModel, boards } = req.body;
@@ -914,14 +971,12 @@ app.post('/generate-sv004', async (req, res) => {
         if (allBlocks.length === 0) {
             return res.status(500).json({ error: 'В шаблоне SV004 не найдено блоков "Стойка".' });
         }
-        console.log(`Найдено блоков SV004: ${allBlocks.length} (input: ${allBlocks.filter(b=>b.type==='input').length}, output: ${allBlocks.filter(b=>b.type==='output').length})`);
         allBlocks.sort((a, b) => a.startRow - b.startRow);
 
         const neededPairs = boards.length;
         let inputBlocks = allBlocks.filter(b => b.type === 'input');
         let outputBlocks = allBlocks.filter(b => b.type === 'output');
 
-        // Копируем входные блоки при необходимости
         while (inputBlocks.length < neededPairs) {
             const lastInput = inputBlocks[inputBlocks.length - 1];
             if (!lastInput) {
@@ -936,7 +991,6 @@ app.post('/generate-sv004', async (req, res) => {
             outputBlocks = allBlocks.filter(b => b.type === 'output');
         }
 
-        // Копируем выходные блоки при необходимости
         while (outputBlocks.length < neededPairs) {
             const lastOutput = outputBlocks[outputBlocks.length - 1];
             if (!lastOutput) {
@@ -958,7 +1012,6 @@ app.post('/generate-sv004', async (req, res) => {
             const board = boards[i];
             const boardNumber = i + 1;
 
-            // plinth1 – входной
             await fillPlinthBlockSV004(
                 worksheet,
                 usedInputBlocks[i].startRow,
@@ -975,7 +1028,6 @@ app.post('/generate-sv004', async (req, res) => {
                 globalModel
             );
 
-            // plinth2 – выходной
             await fillPlinthBlockSV004(
                 worksheet,
                 usedOutputBlocks[i].startRow,
@@ -993,7 +1045,6 @@ app.post('/generate-sv004', async (req, res) => {
             );
         }
 
-        // Удаляем неиспользуемые блоки
         const usedStartRows = new Set();
         usedInputBlocks.forEach(b => usedStartRows.add(b.startRow));
         usedOutputBlocks.forEach(b => usedStartRows.add(b.startRow));
@@ -1013,7 +1064,6 @@ app.post('/generate-sv004', async (req, res) => {
             }
         }
 
-        // Заполняем шпоргалки и Disp с учётом обоих плинтов
         fillSheetsSV004(workbook, boards, globalModel);
 
         applyAutoFit(workbook);
@@ -1021,7 +1071,6 @@ app.post('/generate-sv004', async (req, res) => {
         const buffer = await workbook.xlsx.writeBuffer();
 
         const addressPart = extractAddressPart(address);
-        console.log('🧹 addressPart после очистки (SV004):', addressPart);
         const safeAddress = addressPart.replace(/[\\/:*?"<>|]/g, '_');
         const dateStr = new Date().toISOString().slice(0, 10);
         const filename = `${safeAddress}_${dateStr}_SV004.xlsx`;
@@ -1038,7 +1087,7 @@ app.post('/generate-sv004', async (req, res) => {
     }
 });
 
-// ---------- МАРШРУТ: синхронизация проектов из AsPro в БД (с получением cf_92) ----------
+// ---------- Синхронизация проектов ----------
 app.post('/api/projects/sync', async (req, res) => {
     const apiKey = process.env.API_KEY;
     const baseUrl = process.env.API_BASE_URL;
@@ -1055,7 +1104,6 @@ app.post('/api/projects/sync', async (req, res) => {
 
         while (true) {
             const url = `${baseUrl}?api_key=${apiKey}&page=${page}&per_page=${perPage}`;
-            console.log(`Синхронизация: запрос ${url}`);
             const response = await fetch(url);
             if (!response.ok) {
                 const errorText = await response.text();
@@ -1071,8 +1119,6 @@ app.post('/api/projects/sync', async (req, res) => {
             page++;
             if (page > 30) break;
         }
-
-        console.log(`Синхронизация: загружено ${allProjects.length} проектов`);
 
         const client = await pool.connect();
         try {
@@ -1120,7 +1166,7 @@ app.post('/api/projects/sync', async (req, res) => {
     }
 });
 
-// ---------- МАРШРУТ: обновление статуса расшивок ----------
+// ---------- Обновление статуса ----------
 app.post('/api/projects/update-status', async (req, res) => {
     const { projects } = req.body;
 
@@ -1176,7 +1222,7 @@ app.post('/api/projects/update-status', async (req, res) => {
     }
 });
 
-// ---------- МАРШРУТ: получение списка проектов из БД (с cf_92) ----------
+// ---------- Получение проектов ----------
 app.get('/api/projects', async (req, res) => {
     const { onlyNotDownloaded } = req.query;
     try {
@@ -1194,12 +1240,10 @@ app.get('/api/projects', async (req, res) => {
     }
 });
 
-// ---------- МАРШРУТ: скачивание файла по имени ----------
+// ---------- Скачивание файла ----------
 app.get('/api/projects/download/:fileName', async (req, res) => {
     const { fileName } = req.params;
     const basePath = '//fileserver/!_Work/for Druzhinin Anton/vhd/Расшивки';
-
-    console.log(`📥 Запрос на скачивание: ${fileName}`);
 
     try {
         const result = await pool.query(
@@ -1208,20 +1252,14 @@ app.get('/api/projects/download/:fileName', async (req, res) => {
         );
         if (result.rows.length > 0) {
             const filePath = result.rows[0].file_path;
-            console.log(`   Найден путь в БД: ${filePath}`);
             if (fs.existsSync(filePath)) {
-                console.log(`   ✅ Файл существует, отдаём`);
                 return res.download(filePath, fileName, (err) => {
                     if (err) {
                         console.error('Ошибка при скачивании файла:', err);
                         res.status(500).json({ error: 'Ошибка при скачивании файла' });
                     }
                 });
-            } else {
-                console.log(`   ❌ Файл по пути из БД не найден, начинаем рекурсивный поиск`);
             }
-        } else {
-            console.log(`   Запись с fileName=${fileName} не найдена в БД, начинаем рекурсивный поиск`);
         }
     } catch (err) {
         console.warn('Ошибка поиска пути в БД:', err.message);
@@ -1239,30 +1277,22 @@ app.get('/api/projects/download/:fileName', async (req, res) => {
                         walk(full);
                     } else if (file === fileName) {
                         foundPath = full;
-                        console.log(`   🔍 Найден рекурсивно: ${foundPath}`);
                         return;
                     }
-                } catch (e) {
-                    // игнорируем ошибки доступа
-                }
+                } catch (e) {}
             }
-        } catch (e) {
-            // игнорируем ошибки доступа
-        }
+        } catch (e) {}
     };
     try {
         walk(basePath);
     } catch (err) {
-        console.error('Ошибка поиска файла:', err);
         return res.status(404).json({ error: 'Файл не найден' });
     }
 
     if (!foundPath) {
-        console.log(`   ❌ Файл ${fileName} не найден нигде`);
         return res.status(404).json({ error: 'Файл не найден' });
     }
 
-    console.log(`   ✅ Отдаём файл: ${foundPath}`);
     res.download(foundPath, fileName, (err) => {
         if (err) {
             console.error('Ошибка при скачивании файла:', err);
@@ -1271,7 +1301,7 @@ app.get('/api/projects/download/:fileName', async (req, res) => {
     });
 });
 
-// ---------- Старый маршрут поиска ----------
+// ---------- Поиск проектов ----------
 app.get('/api/projects/search', async (req, res) => {
     const { search, showArchived } = req.query;
     const apiKey = process.env.API_KEY;
@@ -1293,7 +1323,6 @@ app.get('/api/projects/search', async (req, res) => {
 
         while (true) {
             const url = `${baseUrl}?api_key=${apiKey}&page=${page}&per_page=${perPage}`;
-            console.log(`Запрос к AsPro API: ${url}`);
             const response = await fetch(url);
             if (!response.ok) {
                 const errorText = await response.text();
@@ -1338,7 +1367,7 @@ app.get('/api/projects/search', async (req, res) => {
     }
 });
 
-// Запуск сервера
+// Запуск
 app.listen(PORT, () => {
     console.log(`Сервер запущен: http://localhost:${PORT}`);
 });
