@@ -200,17 +200,6 @@
             font-size: 1rem;
             line-height: 1;
         }
-        .board-header .btn-copy {
-            background: #4b5563;
-            font-size: 0.7rem;
-            padding: 4px 12px;
-            height: 26px;
-            color: white;
-            border-radius: 30px;
-        }
-        .board-header .btn-copy:hover {
-            background: #374151;
-        }
         .board-params {
             padding: 10px 18px;
             display: flex;
@@ -431,16 +420,6 @@
             width: 100%;
             font-size: 0.7rem;
             height: 22px;
-        }
-        .btn-copy {
-            background: #4b5563;
-            margin-left: auto;
-            font-size: 0.7rem;
-            padding: 4px 12px;
-            height: 26px;
-        }
-        .btn-copy:hover {
-            background: #374151;
         }
         .board-content {
             transition: all 0.2s;
@@ -667,10 +646,9 @@
     </div>
     <div id="message"></div>
     <div class="info-note">
-        ▼ Для SV005: два плинта (R1/D1 и R2/D2) расположены вертикально (каждый на отдельной строке). Для SV004: один плинт с 4 пинами (0–3), на каждом пине можно выбрать до двух устройств (ИК, КАВ, СМК, ДРС) с указанием количества (по умолчанию 1).<br>
-        • Нумерация плинтов сквозная по порядку плат: SV005 даёт 2 плинта, SV004 – 1 плинт.<br>
+        ▼ Для SV005: два плинта (R1/D1 и R2/D2) расположены вертикально (каждый на отдельной строке). Для SV004: два плинта (R1/D1 и R2/D2), каждый с 4 пинами (0–3). На каждом пине можно выбрать до двух устройств (ИК, КАВ, СМК, ДРС) с указанием количества (по умолчанию 1).<br>
+        • Нумерация плинтов сквозная по порядку плат: SV005 даёт 2 плинта, SV004 – тоже 2 плинта.<br>
         • У каждого пина SV004 можно указать свой номер помещения (если не указан, ячейка остаётся пустой).<br>
-        • Кнопка "Копировать вход → выход" дублирует настройки (только для SV005).<br>
         • 💾 Кнопка "Записать в БД" сохраняет статус выгрузки расшивок для сгенерированных файлов.
     </div>
 </div>
@@ -896,7 +874,7 @@
         return plinthDiv;
     }
 
-    // ---------- Функция пересчёта номеров плинтов ----------
+    // ---------- Функция пересчёта номеров плинтов (для всех плат) ----------
     function renumberBoards() {
         const boardDivs = document.querySelectorAll('.board-card');
         let nextPlinthNumber = 1;
@@ -916,7 +894,8 @@
             plinth1NumInput.value = plinth1Number;
             updateHolderForPlinth(plinth1Div, rack, plinth1Number);
             
-            if (boardType === 'SV005' && plinths.length > 1) {
+            // Второй плинт всегда есть (для обоих типов)
+            if (plinths.length > 1) {
                 const plinth2Div = plinths[1];
                 const plinth2Number = nextPlinthNumber++;
                 const plinth2NumInput = plinth2Div.querySelector('.plinth-number');
@@ -949,15 +928,16 @@
         document.getElementById('totalCount').textContent = boards.length;
     }
 
-    // ---------- Создание платы ----------
+    // ---------- Создание платы (всегда с двумя плинтами) ----------
     function createBoard(boardIndex, initialData = null, collapsed = true, boardType = 'SV005') {
         const boardNumber = boardIndex + 1;
         const defaultRack = "ХК";
 
-        let plinthCount = (boardType === 'SV005') ? 2 : 1;
+        // Всегда 2 плинта
+        const plinthCount = 2;
 
         const defaultHolder1 = buildHolder(defaultRack, 0);
-        const defaultHolder2 = (plinthCount === 2) ? buildHolder(defaultRack, 0) : '';
+        const defaultHolder2 = buildHolder(defaultRack, 0);
 
         let defaultData = {
             rack: defaultRack,
@@ -1048,41 +1028,16 @@
         plinthsContainer.className = 'plinth-container';
         boardDiv.appendChild(plinthsContainer);
 
-        let plinth1Div, plinth2Div = null;
+        let plinth1Div, plinth2Div;
         if (boardType === 'SV005') {
             plinth1Div = createPlinthElementSV005('R1/D1', defaultData.plinth1, defaultData.skud1);
             plinth2Div = createPlinthElementSV005('R2/D2', defaultData.plinth2, defaultData.skud2);
-            plinthsContainer.appendChild(plinth1Div);
-            plinthsContainer.appendChild(plinth2Div);
-        } else {
+        } else { // SV004
             plinth1Div = createPlinthElementSV004('R1/D1', defaultData.plinth1, defaultData.skud1);
-            plinthsContainer.appendChild(plinth1Div);
+            plinth2Div = createPlinthElementSV004('R2/D2', defaultData.plinth2, defaultData.skud2);
         }
-
-        if (boardType === 'SV005') {
-            const copyBtn = document.createElement('button');
-            copyBtn.textContent = '📋 Копировать вход → выход';
-            copyBtn.className = 'btn-copy';
-            copyBtn.addEventListener('click', () => {
-                const selects1 = plinth1Div.querySelectorAll('.device-select');
-                const selects2 = plinth2Div.querySelectorAll('.device-select');
-                selects1.forEach((sel, idx) => {
-                    selects2[idx].value = sel.value;
-                });
-                const cableFields = ['cable-reader', 'cable-lock', 'cable-siren', 'cable-contact', 'cable-exit_btn', 'cable-fire_lock'];
-                cableFields.forEach(cls => {
-                    const src = plinth1Div.querySelector(`.${cls}`);
-                    const dst = plinth2Div.querySelector(`.${cls}`);
-                    if (src && dst) dst.value = src.value;
-                });
-                const room1 = plinth1Div.querySelector('.room-number');
-                const room2 = plinth2Div.querySelector('.room-number');
-                if (room1 && room2) room2.value = room1.value;
-                showMessage('Настройки скопированы', 'success');
-            });
-            const rightPart = header.querySelector('.header-right');
-            header.insertBefore(copyBtn, rightPart);
-        }
+        plinthsContainer.appendChild(plinth1Div);
+        plinthsContainer.appendChild(plinth2Div);
 
         const toggleBtn = header.querySelector('.toggle-board-btn');
         const boardContent = document.createElement('div');
@@ -1130,7 +1085,7 @@
         return boardDiv;
     }
 
-    // ---------- Сбор данных ----------
+    // ---------- Сбор данных (с учётом двух плинтов для SV004) ----------
     function collectData() {
         const address = document.getElementById('address').value.trim();
         const globalModel = document.getElementById('globalModelSelect').value;
@@ -1205,30 +1160,62 @@
 
                 let plinth2Room = '', plinth2Skud = '', plinth2Number = '0', terminalMap2 = {}, cableMap2 = {}, cableNumbers2 = {}, roomMap2 = {};
                 let device1Map2 = {}, device2Map2 = {}, count1Map2 = {}, count2Map2 = {};
-                if (boardType === 'SV005' && plinths.length > 1) {
+                // Второй плинт всегда есть (для обоих типов)
+                if (plinths.length > 1) {
                     const plinth2Div = plinths[1];
-                    plinth2Room = plinth2Div.querySelector('.room-number')?.value?.trim() || '';
-                    plinth2Skud = plinth2Div.querySelector('.skud')?.value?.trim() || '';
-                    plinth2Number = plinth2Div.querySelector('.plinth-number')?.value?.trim() || '0';
-                    const plinth2Terminals = plinth2Div.querySelectorAll('.terminal');
-                    plinth2Terminals.forEach(term => {
-                        const termNum = parseInt(term.dataset.terminal, 10);
-                        const device = term.querySelector('.device-select')?.value || '';
-                        if (device && device !== "") terminalMap2[termNum] = device;
-                    });
-                    cableNumbers2.reader = plinth2Div.querySelector('.cable-reader')?.value?.trim() || '';
-                    cableNumbers2.lock = plinth2Div.querySelector('.cable-lock')?.value?.trim() || '';
-                    cableNumbers2.siren = plinth2Div.querySelector('.cable-siren')?.value?.trim() || '';
-                    cableNumbers2.contact = plinth2Div.querySelector('.cable-contact')?.value?.trim() || '';
-                    cableNumbers2.exit_btn = plinth2Div.querySelector('.cable-exit_btn')?.value?.trim() || '';
-                    cableNumbers2.fire_lock = plinth2Div.querySelector('.cable-fire_lock')?.value?.trim() || '';
+                    if (boardType === 'SV005') {
+                        plinth2Room = plinth2Div.querySelector('.room-number')?.value?.trim() || '';
+                        plinth2Skud = plinth2Div.querySelector('.skud')?.value?.trim() || '';
+                        plinth2Number = plinth2Div.querySelector('.plinth-number')?.value?.trim() || '0';
+                        const plinth2Terminals = plinth2Div.querySelectorAll('.terminal');
+                        plinth2Terminals.forEach(term => {
+                            const termNum = parseInt(term.dataset.terminal, 10);
+                            const device = term.querySelector('.device-select')?.value || '';
+                            if (device && device !== "") terminalMap2[termNum] = device;
+                        });
+                        cableNumbers2.reader = plinth2Div.querySelector('.cable-reader')?.value?.trim() || '';
+                        cableNumbers2.lock = plinth2Div.querySelector('.cable-lock')?.value?.trim() || '';
+                        cableNumbers2.siren = plinth2Div.querySelector('.cable-siren')?.value?.trim() || '';
+                        cableNumbers2.contact = plinth2Div.querySelector('.cable-contact')?.value?.trim() || '';
+                        cableNumbers2.exit_btn = plinth2Div.querySelector('.cable-exit_btn')?.value?.trim() || '';
+                        cableNumbers2.fire_lock = plinth2Div.querySelector('.cable-fire_lock')?.value?.trim() || '';
+                    } else { // SV004
+                        plinth2Skud = plinth2Div.querySelector('.skud')?.value?.trim() || '';
+                        plinth2Number = plinth2Div.querySelector('.plinth-number')?.value?.trim() || '0';
+                        const plinth2Terminals = plinth2Div.querySelectorAll('.terminal');
+                        plinth2Terminals.forEach(term => {
+                            const termNum = parseInt(term.dataset.terminal, 10);
+                            const dev1 = term.querySelector('.device-select1')?.value || '';
+                            const dev2 = term.querySelector('.device-select2')?.value || '';
+                            const cnt1 = parseInt(term.querySelector('.count1')?.value) || 1;
+                            const cnt2 = parseInt(term.querySelector('.count2')?.value) || 1;
+                            const cable = term.querySelector('.cable-pin')?.value?.trim() || '';
+                            const room = term.querySelector('.room-pin')?.value?.trim() || '';
+                            if (dev1) {
+                                device1Map2[termNum] = dev1;
+                                count1Map2[termNum] = cnt1;
+                            }
+                            if (dev2) {
+                                device2Map2[termNum] = dev2;
+                                count2Map2[termNum] = cnt2;
+                            }
+                            if (cable) cableMap2[termNum] = cable;
+                            if (room) roomMap2[termNum] = room;
+                        });
+                        for (let pin = 0; pin <= 3; pin++) {
+                            let parts = [];
+                            if (device1Map2[pin]) parts.push(`${device1Map2[pin]} (${count1Map2[pin] || 1})`);
+                            if (device2Map2[pin]) parts.push(`${device2Map2[pin]} (${count2Map2[pin] || 1})`);
+                            terminalMap2[pin] = parts.join(', ');
+                        }
+                    }
                 }
 
                 boards.push({
                     type: boardType,
                     rack,
                     skud1: plinth1Skud,
-                    skud2: (boardType === 'SV005') ? plinth2Skud : '',
+                    skud2: (plinths.length > 1) ? plinth2Skud : '',
                     plinth1: {
                         number: parseInt(plinth1Number, 10) || 0,
                         room: plinth1Room,
@@ -1241,7 +1228,7 @@
                         count1Map: count1Map1,
                         count2Map: count2Map1
                     },
-                    plinth2: (boardType === 'SV005') ? {
+                    plinth2: (plinths.length > 1) ? {
                         number: parseInt(plinth2Number, 10) || 0,
                         room: plinth2Room,
                         terminalMap: terminalMap2,
@@ -1495,7 +1482,6 @@
                 if (p.expanded_downloaded) {
                     grouped[p.name].expanded_downloaded = true;
                 }
-                // обновляем cf_92 (может быть разный у файлов, но берем первый не null)
                 if (p.cf_92 && !grouped[p.name].cf_92) {
                     grouped[p.name].cf_92 = p.cf_92;
                 }

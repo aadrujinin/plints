@@ -67,9 +67,41 @@ function getCellText(cell) {
             return cell.value.richText.map(rt => rt.text).join('');
         }
         if (cell.value.text) return cell.value.text;
+        // если есть result (формула) – берём его
+        if (cell.value.result !== undefined && cell.value.result !== null) {
+            return String(cell.value.result);
+        }
         return JSON.stringify(cell.value);
     }
     return String(cell.value);
+}
+
+// Безопасное извлечение числового значения из ячейки (поддержка формул)
+function getNumericCellValue(cell) {
+    if (!cell) return NaN;
+    let val = cell.value;
+    if (val === undefined || val === null) return NaN;
+    if (typeof val === 'number') return val;
+    if (typeof val === 'string') {
+        const num = parseFloat(val);
+        return isNaN(num) ? NaN : num;
+    }
+    if (typeof val === 'object') {
+        if (val.result !== undefined) {
+            const num = parseFloat(val.result);
+            return isNaN(num) ? NaN : num;
+        }
+        if (val.text) {
+            const num = parseFloat(val.text);
+            return isNaN(num) ? NaN : num;
+        }
+        if (val.richText && Array.isArray(val.richText)) {
+            const text = val.richText.map(rt => rt.text).join('');
+            const num = parseFloat(text);
+            return isNaN(num) ? NaN : num;
+        }
+    }
+    return NaN;
 }
 
 function buildHolder(rack, plinthNumber) {
@@ -184,7 +216,7 @@ function getBlocksSV005(worksheet) {
     return blocks;
 }
 
-// ---------- Блоки для SV004 (все блоки, не только входные) ----------
+// ---------- Блоки для SV004 (исправлено) ----------
 function getBlocksSV004(worksheet) {
     if (!worksheet) return [];
     const blocks = [];
@@ -193,27 +225,20 @@ function getBlocksSV004(worksheet) {
         const cellE = worksheet.getCell(`E${row}`);
         const text = getCellText(cellE);
         if (text.trim() === 'Стойка') {
-            const cellN = worksheet.getCell(`N${row}`);
-            const plinthNum = parseInt(getCellText(cellN), 10);
-            let type = null;
-            if (!isNaN(plinthNum)) {
-                type = (plinthNum % 2 === 1) ? 'input' : 'output';
-            } else {
-                for (let offset = 1; offset <= 10; offset++) {
-                    const checkRow = row + offset;
-                    if (checkRow > lastRow) break;
-                    const cellE2 = worksheet.getCell(`E${checkRow}`);
-                    if (getCellText(cellE2).trim() === 'Номер плинта') {
-                        const cellN2 = worksheet.getCell(`N${checkRow}`);
-                        const num2 = parseInt(getCellText(cellN2), 10);
-                        if (!isNaN(num2)) {
-                            type = (num2 % 2 === 1) ? 'input' : 'output';
-                            break;
-                        }
-                    }
+            // Ищем строку "Номер плинта" для получения номера
+            let plinthNum = NaN;
+            for (let offset = 1; offset <= 10; offset++) {
+                const checkRow = row + offset;
+                if (checkRow > lastRow) break;
+                const cellE2 = worksheet.getCell(`E${checkRow}`);
+                if (getCellText(cellE2).trim() === 'Номер плинта') {
+                    const cellN2 = worksheet.getCell(`N${checkRow}`);
+                    plinthNum = getNumericCellValue(cellN2);
+                    break;
                 }
             }
-            if (type) {
+            if (!isNaN(plinthNum) && plinthNum > 0) {
+                const type = (plinthNum % 2 === 1) ? 'input' : 'output';
                 let endRow = row;
                 let found = false;
                 for (let r = row + 1; r <= Math.min(row + 30, lastRow); r++) {
@@ -422,18 +447,24 @@ async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel
     }
 }
 
-// ---------- Заполнение листов шпоргалка и Disp для SV004 (без удаления строк) ----------
+// ---------- Заполнение листов шпоргалка и Disp для SV004 (с учетом обоих плинтов) ----------
 function fillSheetsSV004(workbook, boards, globalModel) {
     const maxPlinthsPerController = 16;
-    const totalBoards = boards.length;
+    // Собираем все плинты (входные и выходные) в один массив
+    const allPlinths = [];
+    boards.forEach((board, idx) => {
+        allPlinths.push({ boardIndex: idx, plinth: board.plinth1, type: 'input' });
+        allPlinths.push({ boardIndex: idx, plinth: board.plinth2, type: 'output' });
+    });
+
     const groups = [];
-    for (let i = 0; i < totalBoards; i += maxPlinthsPerController) {
-        groups.push(boards.slice(i, i + maxPlinthsPerController));
+    for (let i = 0; i < allPlinths.length; i += maxPlinthsPerController) {
+        groups.push(allPlinths.slice(i, i + maxPlinthsPerController));
     }
 
     const sheetNames = workbook.worksheets.map(s => s.name);
     for (let g = 0; g < groups.length; g++) {
-        const groupBoards = groups[g];
+        const groupPlinths = groups[g];
         const cheatSheetName = `шпоргалка-${g+1}`;
         const dispSheetName = `Disp-${g+1}`;
         if (!sheetNames.includes(cheatSheetName) || !sheetNames.includes(dispSheetName)) {
@@ -460,19 +491,19 @@ function fillSheetsSV004(workbook, boards, globalModel) {
         // Заполняем шпоргалку
         let rowIdx = 4;
         let counter = 1;
-        for (let i = 0; i < groupBoards.length; i++) {
-            const board = groupBoards[i];
-            const boardNumber = i + 1;
-            const tm = board.plinth1.terminalMap || {};
-            const cm = board.plinth1.cableMap || {};
-            const rm = board.plinth1.roomMap || {};
+        for (let i = 0; i < groupPlinths.length; i++) {
+            const plinthData = groupPlinths[i].plinth;
+            const plinthNumber = plinthData.number;   // используем номер плинта
+            const tm = plinthData.terminalMap || {};
+            const cm = plinthData.cableMap || {};
+            const rm = plinthData.roomMap || {};
             for (let pin = 0; pin <= 3; pin++) {
                 const device = tm[pin] || '';
                 const cable = cm[pin] || '';
                 const room = (rm[pin] && rm[pin].trim()) ? rm[pin] : '';
                 if (device) {
                     cheatSheet.getCell(`A${rowIdx}`).value = '';
-                    cheatSheet.getCell(`B${rowIdx}`).value = boardNumber;
+                    cheatSheet.getCell(`B${rowIdx}`).value = plinthNumber;
                     cheatSheet.getCell(`C${rowIdx}`).value = `Пин${pin}`;
                     cheatSheet.getCell(`D${rowIdx}`).value = device;
                     cheatSheet.getCell(`E${rowIdx}`).value = room ? `пом. ${room}` : '';
@@ -481,7 +512,7 @@ function fillSheetsSV004(workbook, boards, globalModel) {
                     rowIdx++;
                 }
             }
-            rowIdx++; // пустая строка между платами
+            rowIdx++; // пустая строка между плинтами
         }
 
         // Собираем данные из шпоргалки для Disp
@@ -857,7 +888,7 @@ app.post('/generate-sv005', async (req, res) => {
     }
 });
 
-// ---------- Маршрут для SV004 ----------
+// ---------- МАРШРУТ ДЛЯ SV004 (используем два блока: входной и выходной) ----------
 app.post('/generate-sv004', async (req, res) => {
     try {
         const { address, globalModel, boards } = req.body;
@@ -883,15 +914,18 @@ app.post('/generate-sv004', async (req, res) => {
         if (allBlocks.length === 0) {
             return res.status(500).json({ error: 'В шаблоне SV004 не найдено блоков "Стойка".' });
         }
+        console.log(`Найдено блоков SV004: ${allBlocks.length} (input: ${allBlocks.filter(b=>b.type==='input').length}, output: ${allBlocks.filter(b=>b.type==='output').length})`);
         allBlocks.sort((a, b) => a.startRow - b.startRow);
 
-        const needed = boards.length;
+        const neededPairs = boards.length;
         let inputBlocks = allBlocks.filter(b => b.type === 'input');
+        let outputBlocks = allBlocks.filter(b => b.type === 'output');
 
-        while (inputBlocks.length < needed) {
+        // Копируем входные блоки при необходимости
+        while (inputBlocks.length < neededPairs) {
             const lastInput = inputBlocks[inputBlocks.length - 1];
             if (!lastInput) {
-                return res.status(500).json({ error: 'Нет ни одного входного блока для копирования.' });
+                return res.status(500).json({ error: 'Нет входных блоков для копирования.' });
             }
             const lastBlockEnd = Math.max(...allBlocks.map(b => b.endRow));
             const targetStart = lastBlockEnd + 1;
@@ -899,14 +933,32 @@ app.post('/generate-sv004', async (req, res) => {
             allBlocks = getBlocksSV004(worksheet);
             allBlocks.sort((a, b) => a.startRow - b.startRow);
             inputBlocks = allBlocks.filter(b => b.type === 'input');
+            outputBlocks = allBlocks.filter(b => b.type === 'output');
         }
 
-        const usedInputBlocks = inputBlocks.slice(0, needed);
+        // Копируем выходные блоки при необходимости
+        while (outputBlocks.length < neededPairs) {
+            const lastOutput = outputBlocks[outputBlocks.length - 1];
+            if (!lastOutput) {
+                return res.status(500).json({ error: 'Нет выходных блоков для копирования.' });
+            }
+            const lastBlockEnd = Math.max(...allBlocks.map(b => b.endRow));
+            const targetStart = lastBlockEnd + 1;
+            copyBlock(worksheet, lastOutput.startRow, lastOutput.endRow, targetStart);
+            allBlocks = getBlocksSV004(worksheet);
+            allBlocks.sort((a, b) => a.startRow - b.startRow);
+            inputBlocks = allBlocks.filter(b => b.type === 'input');
+            outputBlocks = allBlocks.filter(b => b.type === 'output');
+        }
+
+        const usedInputBlocks = inputBlocks.slice(0, neededPairs);
+        const usedOutputBlocks = outputBlocks.slice(0, neededPairs);
 
         for (let i = 0; i < boards.length; i++) {
             const board = boards[i];
             const boardNumber = i + 1;
 
+            // plinth1 – входной
             await fillPlinthBlockSV004(
                 worksheet,
                 usedInputBlocks[i].startRow,
@@ -922,9 +974,29 @@ app.post('/generate-sv004', async (req, res) => {
                 },
                 globalModel
             );
+
+            // plinth2 – выходной
+            await fillPlinthBlockSV004(
+                worksheet,
+                usedOutputBlocks[i].startRow,
+                {
+                    rack: board.rack,
+                    boardNumber: boardNumber,
+                    plinthNumber: board.plinth2.number,
+                    skud: board.skud2,
+                    room: board.plinth2.room,
+                    terminalMap: board.plinth2.terminalMap,
+                    cableMap: board.plinth2.cableMap,
+                    roomMap: board.plinth2.roomMap || {}
+                },
+                globalModel
+            );
         }
 
-        const usedStartRows = new Set(usedInputBlocks.map(b => b.startRow));
+        // Удаляем неиспользуемые блоки
+        const usedStartRows = new Set();
+        usedInputBlocks.forEach(b => usedStartRows.add(b.startRow));
+        usedOutputBlocks.forEach(b => usedStartRows.add(b.startRow));
         const blocksToDelete = allBlocks.filter(b => !usedStartRows.has(b.startRow));
         blocksToDelete.sort((a, b) => b.startRow - a.startRow);
         for (const block of blocksToDelete) {
@@ -941,7 +1013,7 @@ app.post('/generate-sv004', async (req, res) => {
             }
         }
 
-        // Заполняем существующие листы шпоргалка и disp (без удаления строк)
+        // Заполняем шпоргалки и Disp с учётом обоих плинтов
         fillSheetsSV004(workbook, boards, globalModel);
 
         applyAutoFit(workbook);
