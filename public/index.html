@@ -67,11 +67,12 @@
             position: absolute;
             top: 100%;
             left: 0;
-            right: 0;
+            width: 900px;
+            max-width: 90vw;
             background: white;
             border: 1px solid #ccc;
             border-radius: 8px;
-            max-height: 200px;
+            max-height: 300px;
             overflow-y: auto;
             display: none;
             z-index: 1000;
@@ -82,6 +83,9 @@
             cursor: pointer;
             border-bottom: 1px solid #eee;
             font-size: 0.85rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         #projectSuggestions .suggestion-item:hover {
             background: #f0f6fe;
@@ -176,11 +180,33 @@
             flex-wrap: wrap;
             gap: 8px;
         }
+        .board-header .header-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .board-header .header-right {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
         .board-header button {
             background: transparent;
             padding: 0 8px;
             height: 28px;
             font-size: 1rem;
+            line-height: 1;
+        }
+        .board-header .btn-copy {
+            background: #4b5563;
+            font-size: 0.7rem;
+            padding: 4px 12px;
+            height: 26px;
+            color: white;
+            border-radius: 30px;
+        }
+        .board-header .btn-copy:hover {
+            background: #374151;
         }
         .board-params {
             padding: 10px 18px;
@@ -517,6 +543,8 @@
         <button type="button" id="fillTestBtn" class="btn-secondary">🧪 Тест</button>
         <button type="button" id="checkBoardsBtn" class="btn-secondary">🔍 Проверить платы</button>
         <button type="button" id="applyGlobalRoomBtn" class="btn-secondary">🏠 Применить ко всем</button>
+        <button type="button" id="deleteAllBoardsBtn" class="btn-danger">🗑 Удалить все платы</button>
+        <button type="button" id="toggleAllBoardsBtn" class="btn-secondary">📂 Развернуть/свернуть все</button>
         <button type="button" id="submitExcelTopBtn" class="btn-submit">📎 Excel SV005</button>
         <button type="button" id="submitExcelTopBtnSV004" class="btn-submit btn-submit-sv004">📎 Excel SV004</button>
         <div id="boardCounters">
@@ -753,7 +781,7 @@
             board.dataset.boardIndex = idx;
             const boardNumber = idx + 1;
             const boardType = board.dataset.boardType || 'SV005';
-            const headerSpan = board.querySelector('.board-header span');
+            const headerSpan = board.querySelector('.board-header .header-left span');
             headerSpan.innerText = `🔧 Плата ${boardType} №${boardNumber}`;
             
             const plinths = board.querySelectorAll('.plinth-card');
@@ -879,8 +907,10 @@
         const header = document.createElement('div');
         header.className = 'board-header';
         header.innerHTML = `
-            <span>🔧 Плата ${boardType} №${boardNumber}</span>
-            <div style="display:flex; gap:6px; align-items:center;">
+            <div class="header-left">
+                <span>🔧 Плата ${boardType} №${boardNumber}</span>
+            </div>
+            <div class="header-right">
                 <button class="toggle-board-btn" style="background:transparent; color:white; font-size:1.1rem; padding:0 6px;">${collapsed ? '▶' : '▼'}</button>
                 <button class="delete-board-btn btn-danger" style="font-size:0.7rem; padding:0 10px; height:26px;">🗑</button>
             </div>
@@ -930,7 +960,9 @@
                 if (room1 && room2) room2.value = room1.value;
                 showMessage('Настройки скопированы', 'success');
             });
-            header.querySelector('div').appendChild(copyBtn);
+            // Вставляем кнопку копирования между левой и правой частью
+            const rightPart = header.querySelector('.header-right');
+            header.insertBefore(copyBtn, rightPart);
         }
 
         const toggleBtn = header.querySelector('.toggle-board-btn');
@@ -1226,6 +1258,51 @@
         showMessage(`Помещение "${globalRoom}" применено ко всем плинтам`, 'success');
     }
 
+    // ---------- Удаление всех плат ----------
+    function deleteAllBoards() {
+        if (confirm('Вы уверены, что хотите удалить все платы?')) {
+            const container = document.getElementById('boardsContainer');
+            container.innerHTML = '';
+            renumberBoards();
+            showMessage('Все платы удалены', 'success');
+        }
+    }
+
+    // ---------- Развернуть/свернуть все платы ----------
+    function toggleAllBoards() {
+        const boards = document.querySelectorAll('.board-card');
+        if (boards.length === 0) {
+            showMessage('Нет плат для переключения', 'error');
+            return;
+        }
+        // Определяем, все ли свёрнуты: если хотя бы одна развёрнута, сворачиваем все
+        let allCollapsed = true;
+        boards.forEach(board => {
+            const content = board.querySelector('.board-content');
+            const btn = board.querySelector('.toggle-board-btn');
+            if (content && content.style.display !== 'none') {
+                allCollapsed = false;
+            }
+        });
+
+        boards.forEach(board => {
+            const content = board.querySelector('.board-content');
+            const btn = board.querySelector('.toggle-board-btn');
+            if (content && btn) {
+                if (allCollapsed) {
+                    // Все свёрнуты → развернуть все
+                    content.style.display = '';
+                    btn.textContent = '▼';
+                } else {
+                    // Хотя бы одна развёрнута → свернуть все
+                    content.style.display = 'none';
+                    btn.textContent = '▶';
+                }
+            }
+        });
+        showMessage(allCollapsed ? 'Все платы развернуты' : 'Все платы свернуты', 'success');
+    }
+
     // ---------- Отправка на сервер ----------
     async function submitExcel(endpoint) {
         const data = collectData();
@@ -1326,6 +1403,8 @@
 
     document.getElementById('fillTestBtn').addEventListener('click', fillTestData);
     document.getElementById('applyGlobalRoomBtn').addEventListener('click', applyGlobalRoom);
+    document.getElementById('deleteAllBoardsBtn').addEventListener('click', deleteAllBoards);
+    document.getElementById('toggleAllBoardsBtn').addEventListener('click', toggleAllBoards);
 
     document.getElementById('submitExcelBtn').addEventListener('click', () => submitExcel('/generate-sv005'));
     document.getElementById('submitExcelTopBtn').addEventListener('click', () => submitExcel('/generate-sv005'));
@@ -1343,66 +1422,66 @@
         setTimeout(() => { msgDiv.innerHTML = ''; }, 4000);
     }
 
-    // ---------- Поиск проектов через API (новая функциональность) ----------
-async function searchProjects(query, showArchived) {
-    const container = document.getElementById('projectSuggestions');
-    if (!query || query.length < 2) {
-        container.style.display = 'none';
-        return;
-    }
-
-    try {
-        const params = new URLSearchParams({
-            search: query,
-            showArchived: showArchived ? 'true' : 'false'
-        });
-        const response = await fetch(`/api/projects/search?${params.toString()}`);
-        if (!response.ok) {
-            const err = await response.json();
-            throw new Error(err.error || 'Ошибка поиска');
-        }
-        const data = await response.json();
-        const projects = data.items || [];
-        const totalBefore = data.total_before_filter || 0;
-        const archivedCount = data.archived_count || 0;
-
-        console.log(`🔍 Поиск: "${query}"`);
-        console.log(`   Всего найдено по названию: ${totalBefore}`);
-        console.log(`   Архивных отсеяно: ${archivedCount}`);
-        console.log(`   Показано: ${projects.length}`);
-
-        container.innerHTML = '';
-        if (projects.length === 0) {
-            let message = 'Проекты не найдены';
-            if (totalBefore > 0 && archivedCount > 0 && !showArchived) {
-                message = `Найдено ${totalBefore} проектов, но все они архивные. Включите "Показывать архивные проекты", чтобы увидеть их.`;
-            } else if (totalBefore === 0) {
-                message = 'Проекты не найдены по вашему запросу.';
-            }
-            container.innerHTML = `<div class="no-results">${message}</div>`;
-            container.style.display = 'block';
+    // ---------- Поиск проектов через API ----------
+    async function searchProjects(query, showArchived) {
+        const container = document.getElementById('projectSuggestions');
+        if (!query || query.length < 2) {
+            container.style.display = 'none';
             return;
         }
 
-        projects.forEach(project => {
-            const item = document.createElement('div');
-            item.className = 'suggestion-item';
-            const name = project.name || project.title || 'Без названия';
-            item.textContent = name;
-            item.addEventListener('click', () => {
-                document.getElementById('address').value = name;
-                container.style.display = 'none';
+        try {
+            const params = new URLSearchParams({
+                search: query,
+                showArchived: showArchived ? 'true' : 'false'
             });
-            container.appendChild(item);
-        });
+            const response = await fetch(`/api/projects/search?${params.toString()}`);
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || 'Ошибка поиска');
+            }
+            const data = await response.json();
+            const projects = data.items || [];
+            const totalBefore = data.total_before_filter || 0;
+            const archivedCount = data.archived_count || 0;
 
-        container.style.display = 'block';
-    } catch (error) {
-        console.error('Ошибка поиска проектов:', error);
-        container.innerHTML = `<div class="no-results" style="color:#b91c1c;">Ошибка: ${error.message}</div>`;
-        container.style.display = 'block';
+            console.log(`🔍 Поиск: "${query}"`);
+            console.log(`   Всего найдено по названию: ${totalBefore}`);
+            console.log(`   Архивных отсеяно: ${archivedCount}`);
+            console.log(`   Показано: ${projects.length}`);
+
+            container.innerHTML = '';
+            if (projects.length === 0) {
+                let message = 'Проекты не найдены';
+                if (totalBefore > 0 && archivedCount > 0 && !showArchived) {
+                    message = `Найдено ${totalBefore} проектов, но все они архивные. Включите "Показывать архивные проекты", чтобы увидеть их.`;
+                } else if (totalBefore === 0) {
+                    message = 'Проекты не найдены по вашему запросу.';
+                }
+                container.innerHTML = `<div class="no-results">${message}</div>`;
+                container.style.display = 'block';
+                return;
+            }
+
+            projects.forEach(project => {
+                const item = document.createElement('div');
+                item.className = 'suggestion-item';
+                const name = project.name || project.title || 'Без названия';
+                item.textContent = name;
+                item.addEventListener('click', () => {
+                    document.getElementById('address').value = name;
+                    container.style.display = 'none';
+                });
+                container.appendChild(item);
+            });
+
+            container.style.display = 'block';
+        } catch (error) {
+            console.error('Ошибка поиска проектов:', error);
+            container.innerHTML = `<div class="no-results" style="color:#b91c1c;">Ошибка: ${error.message}</div>`;
+            container.style.display = 'block';
+        }
     }
-}
 
     // Обработчики для поиска
     const addressInput = document.getElementById('address');
