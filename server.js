@@ -23,7 +23,7 @@ const pool = new Pool({
     database: process.env.DB_NAME,
 });
 
-// Создание/обновление таблицы проектов
+// Создание/обновление таблицы проектов (добавлено поле cf_92)
 async function initDatabase() {
     const createQuery = `
         CREATE TABLE IF NOT EXISTS projects (
@@ -33,6 +33,7 @@ async function initDatabase() {
             expanded_downloaded BOOLEAN DEFAULT FALSE,
             file_name TEXT,
             file_path TEXT,
+            cf_92 TEXT,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     `;
@@ -46,6 +47,13 @@ async function initDatabase() {
         if (err.code !== '42704' && !err.message.includes('already exists')) {
             console.warn('⚠️ Не удалось изменить тип id (возможно, уже BIGINT):', err.message);
         }
+    }
+
+    try {
+        await pool.query('ALTER TABLE projects ADD COLUMN IF NOT EXISTS cf_92 TEXT;');
+        console.log('✅ Поле cf_92 добавлено (если отсутствовало)');
+    } catch (err) {
+        console.warn('⚠️ Не удалось добавить cf_92:', err.message);
     }
 }
 initDatabase();
@@ -414,59 +422,117 @@ async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel
     }
 }
 
-// ---------- Создание листов "шпоргалка" и "Disp" для SV004 ----------
-function createSheetsSV004(workbook, boards, globalModel) {
-    const sheetNames = workbook.worksheets.map(s => s.name);
-    if (sheetNames.includes('шпоргалка')) workbook.removeWorksheet('шпоргалка');
-    if (sheetNames.includes('Disp')) workbook.removeWorksheet('Disp');
-
-    const cheatSheet = workbook.addWorksheet('шпоргалка', { properties: { tabColor: { argb: 'FFE0E0E0' } } });
-    cheatSheet.getCell('C2').value = `${globalModel}`;
-    cheatSheet.getCell('C2').font = { bold: true, size: 12 };
-
-    let rowIdx = 4;
-    let counter = 1;
-    for (let i = 0; i < boards.length; i++) {
-        const board = boards[i];
-        const boardNumber = i + 1;
-        const tm = board.plinth1.terminalMap || {};
-        const cm = board.plinth1.cableMap || {};
-        const rm = board.plinth1.roomMap || {};
-
-        for (let pin = 0; pin <= 3; pin++) {
-            const device = tm[pin] || '';
-            const cable = cm[pin] || '';
-            const room = (rm[pin] && rm[pin].trim()) ? rm[pin] : '';
-            if (device) {
-                cheatSheet.getCell(`A${rowIdx}`).value = '';
-                cheatSheet.getCell(`B${rowIdx}`).value = boardNumber;
-                cheatSheet.getCell(`C${rowIdx}`).value = `Пин${pin}`;
-                cheatSheet.getCell(`D${rowIdx}`).value = device;
-                cheatSheet.getCell(`E${rowIdx}`).value = room ? `пом. ${room}` : '';
-                cheatSheet.getCell(`F${rowIdx}`).value = cable ? `ШЛ.${cable}` : '';
-                cheatSheet.getCell(`G${rowIdx}`).value = counter++;
-                const color = (device === 'ИК') ? 'FFFF0000' : (device === 'КАВ') ? 'FF00FF00' : (device === 'СМК') ? 'FF0000FF' : (device === 'ДРС') ? 'FFFFFF00' : 'FFFFFF00';
-                cheatSheet.getCell(`G${rowIdx}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: color } };
-                rowIdx++;
-            }
-        }
-        rowIdx++;
+// ---------- Заполнение листов шпоргалка и Disp для SV004 (без удаления строк) ----------
+function fillSheetsSV004(workbook, boards, globalModel) {
+    const maxPlinthsPerController = 16;
+    const totalBoards = boards.length;
+    const groups = [];
+    for (let i = 0; i < totalBoards; i += maxPlinthsPerController) {
+        groups.push(boards.slice(i, i + maxPlinthsPerController));
     }
 
-    const dispSheet = workbook.addWorksheet('Disp', { properties: { tabColor: { argb: 'FFE0E0FF' } } });
-    dispSheet.getCell('K2').value = 'Display panel';
-    const cheatRows = cheatSheet.rowCount;
-    for (let r = 4; r <= cheatRows; r++) {
-        const srcRow = cheatSheet.getRow(r);
-        if (srcRow.getCell(1).value === '' && srcRow.getCell(2).value === '') continue;
-        const device = srcRow.getCell(4).value || '';
-        const room = srcRow.getCell(5).value || '';
-        const roomNum = room.replace('пом. ', '').trim();
-        const text = roomNum ? `п.${roomNum} - ${device}` : `${device}`;
-        const dispRow = dispSheet.getRow(r - 2);
-        dispRow.getCell(2).value = srcRow.getCell(2).value;
-        dispRow.getCell(3).value = text;
-        dispRow.getCell(4).value = srcRow.getCell(7).value;
+    const sheetNames = workbook.worksheets.map(s => s.name);
+    for (let g = 0; g < groups.length; g++) {
+        const groupBoards = groups[g];
+        const cheatSheetName = `шпоргалка-${g+1}`;
+        const dispSheetName = `Disp-${g+1}`;
+        if (!sheetNames.includes(cheatSheetName) || !sheetNames.includes(dispSheetName)) {
+            console.warn(`⚠️ Листы ${cheatSheetName} или ${dispSheetName} не найдены, пропускаем`);
+            continue;
+        }
+        const cheatSheet = workbook.getWorksheet(cheatSheetName);
+        const dispSheet = workbook.getWorksheet(dispSheetName);
+
+        // Очищаем содержимое ячеек (не удаляем строки)
+        const cheatLastRow = cheatSheet.rowCount;
+        for (let r = 4; r <= cheatLastRow; r++) {
+            for (let col = 1; col <= 7; col++) {
+                cheatSheet.getCell(r, col).value = null;
+            }
+        }
+        const dispLastRow = dispSheet.rowCount;
+        for (let r = 2; r <= dispLastRow; r++) {
+            for (let col = 2; col <= 9; col++) {
+                dispSheet.getCell(r, col).value = null;
+            }
+        }
+
+        // Заполняем шпоргалку
+        let rowIdx = 4;
+        let counter = 1;
+        for (let i = 0; i < groupBoards.length; i++) {
+            const board = groupBoards[i];
+            const boardNumber = i + 1;
+            const tm = board.plinth1.terminalMap || {};
+            const cm = board.plinth1.cableMap || {};
+            const rm = board.plinth1.roomMap || {};
+            for (let pin = 0; pin <= 3; pin++) {
+                const device = tm[pin] || '';
+                const cable = cm[pin] || '';
+                const room = (rm[pin] && rm[pin].trim()) ? rm[pin] : '';
+                if (device) {
+                    cheatSheet.getCell(`A${rowIdx}`).value = '';
+                    cheatSheet.getCell(`B${rowIdx}`).value = boardNumber;
+                    cheatSheet.getCell(`C${rowIdx}`).value = `Пин${pin}`;
+                    cheatSheet.getCell(`D${rowIdx}`).value = device;
+                    cheatSheet.getCell(`E${rowIdx}`).value = room ? `пом. ${room}` : '';
+                    cheatSheet.getCell(`F${rowIdx}`).value = cable ? `ШЛ.${cable}` : '';
+                    cheatSheet.getCell(`G${rowIdx}`).value = counter++;
+                    rowIdx++;
+                }
+            }
+            rowIdx++; // пустая строка между платами
+        }
+
+        // Собираем данные из шпоргалки для Disp
+        const cheatData = [];
+        for (let r = 4; r < rowIdx; r++) {
+            const b = cheatSheet.getCell(`B${r}`).value;
+            const c = cheatSheet.getCell(`C${r}`).value;
+            const d = cheatSheet.getCell(`D${r}`).value;
+            const e = cheatSheet.getCell(`E${r}`).value;
+            const f = cheatSheet.getCell(`F${r}`).value;
+            const g = cheatSheet.getCell(`G${r}`).value;
+            if (b || c || d || e || f || g) {
+                cheatData.push({ b, c, d, e, f, g });
+            }
+        }
+
+        const leftData = cheatData.slice(0, 16);
+        const rightData = cheatData.slice(16, 32);
+
+        let dispRow = 2;
+        leftData.forEach((item, index) => {
+            const row = dispRow + index;
+            let roomNum = '';
+            if (item.e && typeof item.e === 'string' && item.e.startsWith('пом. ')) {
+                roomNum = item.e.substring(5).trim();
+            }
+            const deviceText = item.d ? String(item.d) : '';
+            const displayText = roomNum ? `п.${roomNum} - ${deviceText}` : deviceText;
+            const num = item.g ? String(item.g) : String(index + 1);
+            dispSheet.getCell(`B${row}`).value = num;
+            dispSheet.getCell(`C${row}`).value = displayText;
+            dispSheet.getCell(`D${row}`).value = num;
+            dispSheet.getCell(`E${row}`).value = displayText;
+        });
+
+        rightData.forEach((item, index) => {
+            const row = dispRow + index;
+            let roomNum = '';
+            if (item.e && typeof item.e === 'string' && item.e.startsWith('пом. ')) {
+                roomNum = item.e.substring(5).trim();
+            }
+            const deviceText = item.d ? String(item.d) : '';
+            const displayText = roomNum ? `п.${roomNum} - ${deviceText}` : deviceText;
+            const num = item.g ? String(item.g) : String(17 + index);
+            dispSheet.getCell(`F${row}`).value = num;
+            dispSheet.getCell(`G${row}`).value = displayText;
+            dispSheet.getCell(`H${row}`).value = num;
+            dispSheet.getCell(`I${row}`).value = displayText;
+        });
+
+        dispSheet.getCell(`K2`).value = `Display panel №${g+1}`;
     }
 }
 
@@ -604,10 +670,7 @@ function extractAddressPart(fullName) {
     if (eqIndex !== -1) {
         address = address.substring(eqIndex + 1).trim();
     }
-    // Удаляем префикс "ПАО _ВЫМПЕЛКОМ_" с возможными кавычками
-    // Регулярка: ПАО + необязательные пробелы/подчёркивания + возможно кавычка (одинарная или двойная) + ВЫМПЕЛКОМ + возможно кавычка + необязательные пробелы/подчёркивания
     address = address.replace(/^ПАО\s*_?\s*["']?ВЫМПЕЛКОМ["']?\s*_?\s*/i, '');
-    // Дополнительная проверка на точные префиксы (разные варианты)
     const prefixes = [
         'ПАО _ВЫМПЕЛКОМ_',
         'ПАО ВЫМПЕЛКОМ',
@@ -624,9 +687,7 @@ function extractAddressPart(fullName) {
             break;
         }
     }
-    // Убираем лишние пробелы
     address = address.trim();
-    // Убираем начальные и конечные кавычки, скобки если есть
     address = address.replace(/^["']+|["']+$/g, '');
     return address;
 }
@@ -880,7 +941,8 @@ app.post('/generate-sv004', async (req, res) => {
             }
         }
 
-        createSheetsSV004(workbook, boards, globalModel);
+        // Заполняем существующие листы шпоргалка и disp (без удаления строк)
+        fillSheetsSV004(workbook, boards, globalModel);
 
         applyAutoFit(workbook);
 
@@ -904,7 +966,7 @@ app.post('/generate-sv004', async (req, res) => {
     }
 });
 
-// ---------- МАРШРУТ: синхронизация проектов из AsPro в БД ----------
+// ---------- МАРШРУТ: синхронизация проектов из AsPro в БД (с получением cf_92) ----------
 app.post('/api/projects/sync', async (req, res) => {
     const apiKey = process.env.API_KEY;
     const baseUrl = process.env.API_BASE_URL;
@@ -946,16 +1008,28 @@ app.post('/api/projects/sync', async (req, res) => {
             for (const project of allProjects) {
                 const { id, name, is_archive } = project;
                 const isArchiveBool = (is_archive === 1 || is_archive === true);
+                let cf_92 = null;
+                try {
+                    const detailUrl = `https://inteko.aspro.cloud/api/v1/module/st/projects/get/${id}?api_key=${apiKey}`;
+                    const detailResponse = await fetch(detailUrl);
+                    if (detailResponse.ok) {
+                        const detailData = await detailResponse.json();
+                        cf_92 = detailData.response?.cf_92 || null;
+                    }
+                } catch (err) {
+                    console.warn(`Не удалось получить cf_92 для проекта ${id}:`, err.message);
+                }
+
                 const check = await client.query('SELECT id FROM projects WHERE id = $1', [id]);
                 if (check.rows.length === 0) {
                     await client.query(
-                        'INSERT INTO projects (id, name, is_archive, expanded_downloaded) VALUES ($1, $2, $3, $4)',
-                        [id, name, isArchiveBool, false]
+                        'INSERT INTO projects (id, name, is_archive, expanded_downloaded, cf_92) VALUES ($1, $2, $3, $4, $5)',
+                        [id, name, isArchiveBool, false, cf_92]
                     );
                 } else {
                     await client.query(
-                        'UPDATE projects SET name = $1, is_archive = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
-                        [name, isArchiveBool, id]
+                        'UPDATE projects SET name = $1, is_archive = $2, cf_92 = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4',
+                        [name, isArchiveBool, cf_92, id]
                     );
                 }
             }
@@ -1030,11 +1104,11 @@ app.post('/api/projects/update-status', async (req, res) => {
     }
 });
 
-// ---------- МАРШРУТ: получение списка проектов из БД ----------
+// ---------- МАРШРУТ: получение списка проектов из БД (с cf_92) ----------
 app.get('/api/projects', async (req, res) => {
     const { onlyNotDownloaded } = req.query;
     try {
-        let query = 'SELECT id, name, is_archive, expanded_downloaded, file_name, file_path, updated_at FROM projects';
+        let query = 'SELECT id, name, is_archive, expanded_downloaded, file_name, file_path, cf_92, updated_at FROM projects';
         const params = [];
         if (onlyNotDownloaded === 'true') {
             query += ' WHERE expanded_downloaded = false';
@@ -1048,14 +1122,13 @@ app.get('/api/projects', async (req, res) => {
     }
 });
 
-// ---------- МАРШРУТ: скачивание файла по имени (с улучшенным логированием) ----------
+// ---------- МАРШРУТ: скачивание файла по имени ----------
 app.get('/api/projects/download/:fileName', async (req, res) => {
     const { fileName } = req.params;
     const basePath = '//fileserver/!_Work/for Druzhinin Anton/vhd/Расшивки';
 
     console.log(`📥 Запрос на скачивание: ${fileName}`);
 
-    // 1. Сначала ищем путь в БД по имени файла
     try {
         const result = await pool.query(
             'SELECT file_path FROM projects WHERE file_name = $1 AND file_path IS NOT NULL',
@@ -1082,7 +1155,6 @@ app.get('/api/projects/download/:fileName', async (req, res) => {
         console.warn('Ошибка поиска пути в БД:', err.message);
     }
 
-    // 2. Если в БД нет, ищем рекурсивно по папкам (запасной вариант)
     let foundPath = null;
     const walk = (dir) => {
         try {
