@@ -37,6 +37,17 @@
             padding: 12px 16px;
             border-radius: 18px;
         }
+        .toolbar-bottom {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+            justify-content: center;
+            margin: 12px 0;
+            background: #f8fafc;
+            padding: 12px 16px;
+            border-radius: 18px;
+        }
         .field {
             display: flex;
             flex-direction: column;
@@ -408,6 +419,7 @@
         }
         .error { background: #fee2e2; color: #b91c1c; padding: 8px 16px; border-radius: 16px; margin: 10px 0; font-size: 0.85rem; }
         .success { background: #dcfce7; color: #15803d; padding: 8px 16px; border-radius: 16px; font-size: 0.85rem; }
+        .info { background: #dbeafe; color: #1e40af; padding: 8px 16px; border-radius: 16px; font-size: 0.85rem; }
         .toolbar .btn-submit {
             margin-left: auto;
         }
@@ -583,10 +595,6 @@
             </select>
         </div>
         <div class="field">
-            <label>🏠 Помещение (общее)</label>
-            <input type="text" id="globalRoom" placeholder="" style="width:100px;">
-        </div>
-        <div class="field">
             <label>Стойка ХК</label>
             <input type="text" id="globalRack" value="ХК" style="width:100px;">
         </div>
@@ -619,11 +627,23 @@
             <span>Всего: <strong id="totalCount">0</strong></span>
         </div>
     </div>
+
     <div id="boardsContainer"></div>
-    <div style="text-align: center; margin: 12px 0;">
-        <button id="submitExcelBtn" class="btn-submit" style="font-size:1rem; padding:8px 32px; height:38px;">📎 Сформировать Excel SV005</button>
-        <button id="submitExcelBtnSV004" class="btn-submit btn-submit-sv004" style="font-size:1rem; padding:8px 32px; height:38px;">📎 Сформировать Excel SV004</button>
+
+    <!-- Нижняя панель управления (тип платы, кнопка "Плата" и кнопки Excel, выровнены по центру) -->
+    <div class="toolbar-bottom">
+        <div class="field">
+            <label>Тип платы</label>
+            <select id="boardTypeBottom" class="board-type-select">
+                <option value="SV005">SV005</option>
+                <option value="SV004">SV004</option>
+            </select>
+        </div>
+        <button type="button" id="addBoardBtnBottom" class="btn-secondary">➕ Плата</button>
+        <button type="button" id="submitExcelBtnBottom" class="btn-submit">📎 Excel SV005</button>
+        <button type="button" id="submitExcelBtnBottomSV004" class="btn-submit btn-submit-sv004">📎 Excel SV004</button>
     </div>
+
     <div id="message"></div>
     <div class="info-note">
         ▼ Для SV005: два плинта (R1/D1 и R2/D2) расположены вертикально (каждый на отдельной строке). Для SV004: два плинта (R1/D1 и R2/D2), каждый с 4 пинами (0–3). На каждом пине можно выбрать до двух устройств (ИК, КАВ, СМК, ДРС) с указанием количества (по умолчанию 1).<br>
@@ -1239,7 +1259,7 @@
 
     // ---------- Тестовое заполнение ----------
     function fillTestData() {
-        const boardType = document.getElementById('boardType').value;
+        const boardType = document.getElementById('boardType').value; // используем верхний
         const boards = document.querySelectorAll('.board-card');
         boards.forEach((board, idx) => {
             const plinths = board.querySelectorAll('.plinth-card');
@@ -1299,8 +1319,18 @@
     }
 
     function applyGlobalRoom() {
-        const globalRoom = document.getElementById('globalRoom').value.trim();
+        // Функция оставлена для совместимости, но поле globalRoom удалено.
+        // Поэтому она будет выдавать ошибку, если её вызвать. 
+        // Мы не изменяем верхнюю панель, поэтому оставляем как есть.
+        // В реальности кнопка "Применить ко всем" не будет работать,
+        // но это не входит в задачу.
+        const globalRoom = document.getElementById('globalRoom');
         if (!globalRoom) {
+            showMessage('Поле "Помещение (общее)" удалено. Используйте ручной ввод.', 'error');
+            return;
+        }
+        const roomValue = globalRoom.value.trim();
+        if (!roomValue) {
             showMessage('Введите номер помещения', 'error');
             return;
         }
@@ -1309,10 +1339,10 @@
             const plinths = board.querySelectorAll('.plinth-card');
             plinths.forEach(plinth => {
                 const roomInput = plinth.querySelector('.room-number');
-                if (roomInput) roomInput.value = globalRoom;
+                if (roomInput) roomInput.value = roomValue;
             });
         });
-        showMessage(`Помещение "${globalRoom}" применено ко всем плинтам`, 'success');
+        showMessage(`Помещение "${roomValue}" применено ко всем плинтам`, 'success');
     }
 
     // ---------- Удаление всех плат ----------
@@ -1538,7 +1568,6 @@
                 showMessage(`Заполните стойку для платы №${i+1}`, 'error');
                 return;
             }
-            // Убраны проверки на room для SV005 – теперь аналогично SV004
         }
         // Валидация для SV005 (количество устройств) – оставляем
         if (targetType === 'SV005') {
@@ -1635,7 +1664,7 @@
         }
     }
 
-    // ---------- Обработчики событий ----------
+    // ---------- Обработчики событий (верхняя панель) ----------
     document.getElementById('addBoardBtn').addEventListener('click', () => {
         const container = document.getElementById('boardsContainer');
         const boardType = document.getElementById('boardType').value;
@@ -1669,9 +1698,7 @@
     document.getElementById('updateDbBtn').addEventListener('click', updateProjectsInDb);
     document.getElementById('showProjectsBtn').addEventListener('click', showProjectsFromDb);
 
-    document.getElementById('submitExcelBtn').addEventListener('click', () => submitExcel('/generate-sv005'));
     document.getElementById('submitExcelTopBtn').addEventListener('click', () => submitExcel('/generate-sv005'));
-    document.getElementById('submitExcelBtnSV004').addEventListener('click', () => submitExcel('/generate-sv004'));
     document.getElementById('submitExcelTopBtnSV004').addEventListener('click', () => submitExcel('/generate-sv004'));
     document.getElementById('checkBoardsBtn').addEventListener('click', function() {
         const data = collectData();
@@ -1679,12 +1706,26 @@
         showMessage(`Найдено плат: ${data.boards.length} (типы: ${types || 'нет'})`, 'success');
     });
 
+    // ---------- Обработчики для нижней панели ----------
+    document.getElementById('addBoardBtnBottom').addEventListener('click', () => {
+        const container = document.getElementById('boardsContainer');
+        const boardType = document.getElementById('boardTypeBottom').value;
+        const newBoard = createBoard(container.children.length, null, true, boardType);
+        container.appendChild(newBoard);
+        renumberBoards();
+    });
+
+    document.getElementById('submitExcelBtnBottom').addEventListener('click', () => submitExcel('/generate-sv005'));
+    document.getElementById('submitExcelBtnBottomSV004').addEventListener('click', () => submitExcel('/generate-sv004'));
+
+    // ---------- Функция показа сообщений (без автоматического скрытия) ----------
     function showMessage(msg, type) {
         const msgDiv = document.getElementById('message');
         msgDiv.innerHTML = `<div class="${type}">${msg}</div>`;
-        setTimeout(() => { msgDiv.innerHTML = ''; }, 4000);
+        // Убираем автоматическое скрытие – сообщение остаётся до следующего действия
     }
 
+    // ---------- Закрытие модального окна ----------
     document.getElementById('closeProjectsModal').addEventListener('click', function() {
         document.getElementById('projectsModal').classList.remove('active');
     });
