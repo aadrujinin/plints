@@ -598,7 +598,7 @@
             text-overflow: ellipsis;
             white-space: nowrap;
             vertical-align: middle;
-            pointer-events: auto; /* чтобы ссылки были кликабельны */
+            pointer-events: auto;
         }
 
         .status-badge {
@@ -638,7 +638,6 @@
         .cf-link:hover {
             color: #0f2b4f;
         }
-        /* Кнопка "Выбрать" в строке проекта */
         .select-project-btn {
             background: #1e4663;
             border: none;
@@ -977,15 +976,15 @@
             const boardType = board.dataset.boardType || 'SV005';
             const headerSpan = board.querySelector('.board-header .header-left span');
             headerSpan.innerText = `🔧 Плата ${boardType} №${boardNumber}`;
-            
+
             const plinths = board.querySelectorAll('.plinth-card');
-            
+
             const plinth1Div = plinths[0];
             const plinth1Number = nextPlinthNumber++;
             const plinth1NumInput = plinth1Div.querySelector('.plinth-number');
             plinth1NumInput.value = plinth1Number;
             updateHolderForPlinth(plinth1Div, globalRack, plinth1Number);
-            
+
             if (plinths.length > 1) {
                 const plinth2Div = plinths[1];
                 const plinth2Number = nextPlinthNumber++;
@@ -1172,7 +1171,7 @@
                 const plinth1Room = boardType === 'SV005' ? (plinth1Div.querySelector('.room-number')?.value?.trim() || '') : '';
                 const plinth1Skud = plinth1Div.querySelector('.skud')?.value?.trim() || '';
                 const plinth1Number = plinth1Div.querySelector('.plinth-number')?.value?.trim() || '0';
-                
+
                 let terminalMap1 = {}, cableMap1 = {}, roomMap1 = {};
                 let device1Map1 = {}, device2Map1 = {}, count1Map1 = {}, count2Map1 = {};
                 if (boardType === 'SV005') {
@@ -1470,66 +1469,69 @@
         showMessage(allCollapsed ? 'Все платы развернуты' : 'Все платы свернуты', 'success');
     }
 
-    // ---------- Синхронизация с SSE (прогресс) ----------
+    // ---------- СИНХРОНИЗАЦИЯ С ПРОЕКТАМИ ----------
     async function syncProjects() {
         const msgDiv = document.getElementById('message');
         msgDiv.innerHTML = `<div class="info">🔄 Начинаем синхронизацию...</div>`;
 
         try {
-            const eventSource = new EventSource('/api/projects/sync-stream');
-            let progressMsg = '';
+            const response = await fetch('/api/projects/sync-stream');
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(`Сервер вернул ${response.status}: ${errText}`);
+            }
 
-            eventSource.onmessage = function(event) {
-                const data = JSON.parse(event.data);
-                switch (data.type) {
-                    case 'status':
-                        progressMsg = data.message;
-                        msgDiv.innerHTML = `<div class="info">🔄 ${progressMsg}</div>`;
-                        break;
-                    case 'progress':
-                        if (data.loaded !== undefined && data.total) {
-                            const percent = Math.round((data.loaded / data.total) * 100);
-                            msgDiv.innerHTML = `<div class="info">🔄 Загружено ${data.loaded} из ${data.total} (${percent}%)</div>`;
-                        } else if (data.processed !== undefined && data.total) {
-                            const percent = Math.round((data.processed / data.total) * 100);
-                            msgDiv.innerHTML = `<div class="info">🔄 Обработано ${data.processed} из ${data.total} (${percent}%)</div>`;
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+
+                const events = buffer.split('\n\n');
+                buffer = events.pop();
+
+                for (const event of events) {
+                    if (event.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(event.substring(6));
+                            switch (data.type) {
+                                case 'status':
+                                    msgDiv.innerHTML = `<div class="info">🔄 ${data.message}</div>`;
+                                    break;
+                                case 'progress':
+                                    if (data.loaded !== undefined && data.total) {
+                                        const percent = Math.round((data.loaded / data.total) * 100);
+                                        msgDiv.innerHTML = `<div class="info">🔄 Загружено ${data.loaded} из ${data.total} (${percent}%)</div>`;
+                                    } else if (data.processed !== undefined && data.total) {
+                                        const percent = Math.round((data.processed / data.total) * 100);
+                                        msgDiv.innerHTML = `<div class="info">🔄 Обработано ${data.processed} из ${data.total} (${percent}%)</div>`;
+                                    }
+                                    break;
+                                case 'done':
+                                    msgDiv.innerHTML = `<div class="success">✅ Синхронизация завершена! Загружено ${data.total} проектов.</div>`;
+                                    break;
+                                case 'error':
+                                    msgDiv.innerHTML = `<div class="error">❌ Ошибка: ${data.message}</div>`;
+                                    break;
+                                default:
+                                    break;
+                            }
+                        } catch (err) {
+                            console.warn('Ошибка парсинга SSE:', err);
                         }
-                        break;
-                    case 'done':
-                        msgDiv.innerHTML = `<div class="success">✅ Синхронизация завершена! Загружено ${data.total} проектов.</div>`;
-                        eventSource.close();
-                        break;
-                    case 'error':
-                        msgDiv.innerHTML = `<div class="error">❌ Ошибка: ${data.message}</div>`;
-                        eventSource.close();
-                        break;
-                    default:
-                        break;
+                    }
                 }
-            };
-
-            eventSource.onerror = function() {
-                if (eventSource.readyState === EventSource.CLOSED) {
-                    // уже закрыто
-                } else {
-                    msgDiv.innerHTML = `<div class="error">❌ Ошибка соединения с сервером</div>`;
-                    eventSource.close();
-                }
-            };
-
-            setTimeout(() => {
-                if (eventSource.readyState !== EventSource.CLOSED) {
-                    eventSource.close();
-                    msgDiv.innerHTML = `<div class="error">⏱ Превышено время ожидания</div>`;
-                }
-            }, 300000);
-
+            }
         } catch (error) {
+            console.error('Ошибка синхронизации:', error);
             msgDiv.innerHTML = `<div class="error">❌ Ошибка: ${error.message}</div>`;
         }
     }
 
-    // ---------- Запись статуса в БД ----------
+    // ---------- ЗАПИСЬ СТАТУСА В БД ----------
     async function updateProjectsInDb() {
         if (lastGeneratedProjects.length === 0) {
             showMessage('Нет проектов для записи (сначала сгенерируйте файлы)', 'error');
@@ -1553,7 +1555,7 @@
         }
     }
 
-    // ---------- Просмотр проектов из БД ----------
+    // ---------- ПРОСМОТР ПРОЕКТОВ ИЗ БД ----------
     async function showProjectsFromDb() {
         const modal = document.getElementById('projectsModal');
         const container = document.getElementById('projectsListContainer');
@@ -1578,7 +1580,6 @@
 
             const searchInput = document.getElementById('projectsSearch');
             const filterSelect = document.getElementById('projectsArchiveFilter');
-            // Удаляем старые обработчики, чтобы не накапливались
             const newSearch = searchInput.cloneNode(true);
             const newFilter = filterSelect.cloneNode(true);
             searchInput.parentNode.replaceChild(newSearch, searchInput);
@@ -1672,18 +1673,19 @@
             });
             if (!fileButtons) fileButtons = '—';
 
-            // Кнопка "Выбрать" и сама строка кликабельна
-            const projectNameEscaped = escapeHtml(name);
+            // ИСПРАВЛЕНИЕ: используем encodeURIComponent для data-атрибута, чтобы гарантировать корректную передачу любых символов
+            const encodedName = encodeURIComponent(name);
+            const escapedName = escapeHtml(name);
             html += `
-                <tr data-project-name="${escapeHtml(name)}" style="cursor:pointer;">
-                    <td><strong>${projectNameEscaped}</strong></td>
+                <tr data-project-name="${encodedName}" style="cursor:pointer;">
+                    <td><strong>${escapedName}</strong></td>
                     <td>${archiveText}</td>
                     <td><span class="status-badge ${statusClass}">${statusText}</span></td>
                     <td class="link-cell">${cfLink}</td>
                     <td class="link-cell">${ncLink}</td>
                     <td>
                         ${fileButtons}
-                        <button class="select-project-btn" data-project-name="${escapeHtml(name)}" style="margin-left:6px;">📌 Выбрать</button>
+                        <button class="select-project-btn" data-project-name="${encodedName}" style="margin-left:6px;">📌 Выбрать</button>
                     </td>
                 </tr>
             `;
@@ -1695,7 +1697,7 @@
         // Обработчики для кнопок скачивания
         container.querySelectorAll('.download-btn').forEach(btn => {
             btn.addEventListener('click', async function(e) {
-                e.stopPropagation(); // чтобы не срабатывал выбор проекта
+                e.stopPropagation();
                 const fileName = this.dataset.filename;
                 try {
                     const response = await fetch(`/api/projects/download/${encodeURIComponent(fileName)}`);
@@ -1718,42 +1720,45 @@
             });
         });
 
-        // Обработчики для кнопок "Выбрать" и для самой строки (tr)
+        // Обработчики для кнопок "Выбрать"
         container.querySelectorAll('.select-project-btn').forEach(btn => {
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
-                const projectName = this.dataset.projectName;
-                selectProject(projectName);
+                const encodedName = this.dataset.projectName;
+                if (encodedName) {
+                    const decodedName = decodeURIComponent(encodedName);
+                    selectProject(decodedName);
+                }
             });
         });
 
+        // Обработчики для строк таблицы
         container.querySelectorAll('.projects-table tbody tr').forEach(tr => {
             tr.addEventListener('click', function() {
-                const projectName = this.dataset.projectName;
-                if (projectName) {
-                    selectProject(projectName);
+                const encodedName = this.dataset.projectName;
+                if (encodedName) {
+                    const decodedName = decodeURIComponent(encodedName);
+                    selectProject(decodedName);
                 }
             });
         });
     }
 
-    // Функция выбора проекта и подстановки в поле адреса
+    // ---------- ВЫБОР ПРОЕКТА ----------
     function selectProject(projectName) {
         if (!projectName) return;
         const addressInput = document.getElementById('address');
         if (addressInput) {
             addressInput.value = projectName;
-            // Можно также скрыть выпадающий список подсказок
             const suggestions = document.getElementById('projectSuggestions');
             if (suggestions) suggestions.style.display = 'none';
+            showMessage(`✅ Проект "${projectName}" выбран`, 'success');
         }
-        // Закрыть модалку
         const modal = document.getElementById('projectsModal');
         if (modal) modal.classList.remove('active');
-        showMessage(`✅ Проект "${projectName}" выбран`, 'success');
     }
 
-    // ---------- Отправка на сервер (генерация Excel) ----------
+    // ---------- ГЕНЕРАЦИЯ EXCEL ----------
     async function submitExcel(endpoint) {
         const data = collectData();
         if (!data.address) {
@@ -1802,18 +1807,15 @@
             a.href = url;
 
             const contentDisposition = response.headers.get('Content-Disposition');
-            console.log('📄 Content-Disposition:', contentDisposition);
             let filename = null;
             if (contentDisposition) {
                 let match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
                 if (match) {
                     filename = decodeURIComponent(match[1]);
-                    console.log('✅ Имя получено из filename*=:', filename);
                 } else {
                     match = contentDisposition.match(/filename="([^"]+)"/);
                     if (match) {
                         filename = match[1];
-                        console.log('✅ Имя получено из filename="":', filename);
                     }
                 }
             }
@@ -1824,10 +1826,7 @@
                         const decodedPath = decodeURIComponent(filePathHeader);
                         const pathParts = decodedPath.split(/[\\/]/);
                         filename = pathParts[pathParts.length - 1];
-                        console.log('✅ Имя извлечено из X-File-Path:', filename);
-                    } catch(e) {
-                        console.warn('⚠️ Не удалось извлечь имя из X-File-Path');
-                    }
+                    } catch(e) {}
                 }
             }
             if (!filename) {
@@ -1840,7 +1839,6 @@
                 const safeAddress = addressPart.replace(/[\\/:*?"<>|]/g, '_');
                 const dateStr = new Date().toISOString().slice(0, 10);
                 filename = `${safeAddress}_${dateStr}_${targetType}.xlsx`;
-                console.log('⚠️ Использован запасной вариант имени:', filename);
             }
             a.download = filename;
             document.body.appendChild(a);
@@ -1871,7 +1869,90 @@
         }
     }
 
-    // ---------- Обработчики событий (верхняя панель) ----------
+    // ---------- ПОИСК ПРОЕКТОВ В СТРОКЕ АДРЕС ----------
+    async function searchProjects(query, showArchived) {
+        const container = document.getElementById('projectSuggestions');
+        if (!container) {
+            console.error('❌ Контейнер #projectSuggestions не найден!');
+            return;
+        }
+
+        if (!query || query.length < 2) {
+            container.style.display = 'none';
+            const msgDiv = document.getElementById('message');
+            if (msgDiv && msgDiv.innerHTML.includes('🔍 Ищем проекты...')) {
+                msgDiv.innerHTML = '';
+            }
+            return;
+        }
+
+        const msgDiv = document.getElementById('message');
+        msgDiv.innerHTML = `<div class="info">🔍 Ищем проекты...</div>`;
+
+        try {
+            const params = new URLSearchParams({
+                search: query,
+                showArchived: showArchived ? 'true' : 'false'
+            });
+            const response = await fetch(`/api/projects/search?${params.toString()}`);
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || 'Ошибка поиска');
+            }
+            const data = await response.json();
+            const projects = data.items || [];
+            const totalBefore = data.total_before_filter || 0;
+            const archivedCount = data.archived_count || 0;
+
+            console.log(`🔍 Поиск: "${query}"`);
+            console.log(`   Всего найдено по названию: ${totalBefore}`);
+            console.log(`   Архивных отсеяно: ${archivedCount}`);
+            console.log(`   Показано: ${projects.length}`);
+
+            if (msgDiv && msgDiv.innerHTML.includes('🔍 Ищем проекты...')) {
+                msgDiv.innerHTML = '';
+            }
+
+            container.innerHTML = '';
+            if (projects.length === 0) {
+                let message = 'Проекты не найдены';
+                if (totalBefore > 0 && archivedCount > 0 && !showArchived) {
+                    message = `Найдено ${totalBefore} проектов, но все они архивные. Включите "Показывать архивные проекты", чтобы увидеть их.`;
+                } else if (totalBefore === 0) {
+                    message = 'Проекты не найдены по вашему запросу.';
+                }
+                container.innerHTML = `<div class="no-results">${message}</div>`;
+                container.style.display = 'block';
+                return;
+            }
+
+            projects.forEach(project => {
+                const item = document.createElement('div');
+                item.className = 'suggestion-item';
+                const name = project.name || project.title || 'Без названия';
+                item.textContent = name;
+                item.addEventListener('click', () => {
+                    document.getElementById('address').value = name;
+                    container.style.display = 'none';
+                });
+                container.appendChild(item);
+            });
+
+            container.style.display = 'block';
+        } catch (error) {
+            console.error('Ошибка поиска проектов:', error);
+            container.innerHTML = `<div class="no-results" style="color:#b91c1c;">Ошибка: ${error.message}</div>`;
+            container.style.display = 'block';
+            showMessage(`❌ Ошибка поиска: ${error.message}`, 'error');
+        }
+    }
+
+    // ---------- ОБРАБОТЧИКИ ----------
+    function showMessage(msg, type) {
+        const msgDiv = document.getElementById('message');
+        msgDiv.innerHTML = `<div class="${type}">${msg}</div>`;
+    }
+
     document.getElementById('addBoardBtn').addEventListener('click', () => {
         const container = document.getElementById('boardsContainer');
         const boardType = document.getElementById('boardType').value;
@@ -1913,7 +1994,7 @@
         showMessage(`Найдено плат: ${data.boards.length} (типы: ${types || 'нет'})`, 'success');
     });
 
-    // ---------- Обработчики для нижней панели ----------
+    // Нижняя панель
     document.getElementById('addBoardBtnBottom').addEventListener('click', () => {
         const container = document.getElementById('boardsContainer');
         const boardType = document.getElementById('boardTypeBottom').value;
@@ -1925,13 +2006,7 @@
     document.getElementById('submitExcelBtnBottom').addEventListener('click', () => submitExcel('/generate-sv005'));
     document.getElementById('submitExcelBtnBottomSV004').addEventListener('click', () => submitExcel('/generate-sv004'));
 
-    // ---------- Функция показа сообщений (без автоматического скрытия) ----------
-    function showMessage(msg, type) {
-        const msgDiv = document.getElementById('message');
-        msgDiv.innerHTML = `<div class="${type}">${msg}</div>`;
-    }
-
-    // ---------- Закрытие модального окна ----------
+    // Закрытие модалки
     document.getElementById('closeProjectsModal').addEventListener('click', function() {
         document.getElementById('projectsModal').classList.remove('active');
     });
@@ -1941,99 +2016,16 @@
         }
     });
 
-    // ---------- Обработчик изменения глобальной стойки ----------
+    // Глобальная стойка
     document.getElementById('globalRack').addEventListener('input', function() {
         renumberBoards();
     });
 
-    // ---------- ПОИСК ПРОЕКТОВ В СТРОКЕ "АДРЕС" (с уведомлением о прогрессе) ----------
-    let searchTimeout = null;
-
-    async function searchProjects(query, showArchived) {
-        const container = document.getElementById('projectSuggestions');
-        if (!container) {
-            console.error('❌ Контейнер #projectSuggestions не найден!');
-            return;
-        }
-
-        if (!query || query.length < 2) {
-            container.style.display = 'none';
-            // Скрываем сообщение о поиске, если оно было
-            const msgDiv = document.getElementById('message');
-            if (msgDiv && msgDiv.innerHTML.includes('🔍 Ищем проекты...')) {
-                msgDiv.innerHTML = '';
-            }
-            return;
-        }
-
-        // Показываем уведомление о поиске
-        showMessage('🔍 Ищем проекты...', 'info');
-
-        try {
-            const params = new URLSearchParams({
-                search: query,
-                showArchived: showArchived ? 'true' : 'false'
-            });
-            const response = await fetch(`/api/projects/search?${params.toString()}`);
-            if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.error || 'Ошибка поиска');
-            }
-            const data = await response.json();
-            const projects = data.items || [];
-            const totalBefore = data.total_before_filter || 0;
-            const archivedCount = data.archived_count || 0;
-
-            console.log(`🔍 Поиск: "${query}"`);
-            console.log(`   Всего найдено по названию: ${totalBefore}`);
-            console.log(`   Архивных отсеяно: ${archivedCount}`);
-            console.log(`   Показано: ${projects.length}`);
-
-            // Убираем сообщение о поиске, если оно всё ещё висит
-            const msgDiv = document.getElementById('message');
-            if (msgDiv && msgDiv.innerHTML.includes('🔍 Ищем проекты...')) {
-                msgDiv.innerHTML = '';
-            }
-
-            container.innerHTML = '';
-            if (projects.length === 0) {
-                let message = 'Проекты не найдены';
-                if (totalBefore > 0 && archivedCount > 0 && !showArchived) {
-                    message = `Найдено ${totalBefore} проектов, но все они архивные. Включите "Показывать архивные проекты", чтобы увидеть их.`;
-                } else if (totalBefore === 0) {
-                    message = 'Проекты не найдены по вашему запросу.';
-                }
-                container.innerHTML = `<div class="no-results">${message}</div>`;
-                container.style.display = 'block';
-                return;
-            }
-
-            projects.forEach(project => {
-                const item = document.createElement('div');
-                item.className = 'suggestion-item';
-                const name = project.name || project.title || 'Без названия';
-                item.textContent = name;
-                item.addEventListener('click', () => {
-                    document.getElementById('address').value = name;
-                    container.style.display = 'none';
-                });
-                container.appendChild(item);
-            });
-
-            container.style.display = 'block';
-        } catch (error) {
-            console.error('Ошибка поиска проектов:', error);
-            container.innerHTML = `<div class="no-results" style="color:#b91c1c;">Ошибка: ${error.message}</div>`;
-            container.style.display = 'block';
-            // Показываем ошибку в сообщении
-            showMessage(`❌ Ошибка поиска: ${error.message}`, 'error');
-        }
-    }
-
-    // Проверяем, что элементы существуют перед привязкой обработчиков
+    // ---------- ПОИСК В АДРЕСЕ ----------
     const addressInput = document.getElementById('address');
     const showArchivedCheckbox = document.getElementById('showArchived');
     const suggestionsContainer = document.getElementById('projectSuggestions');
+    let searchTimeout = null;
 
     if (addressInput && showArchivedCheckbox && suggestionsContainer) {
         addressInput.addEventListener('input', function() {
@@ -2059,7 +2051,7 @@
             }
         });
     } else {
-        console.error('❌ Не найдены элементы для поиска: address, showArchived или projectSuggestions');
+        console.error('❌ Не найдены элементы для поиска');
     }
 
     // Стартовая плата
@@ -2069,7 +2061,7 @@
         container.appendChild(startBoard);
         renumberBoards();
     } else {
-        console.error('❌ Контейнер #boardsContainer не найден!');
+        console.error('❌ Контейнер #boardsContainer не найден');
     }
 </script>
 </body>

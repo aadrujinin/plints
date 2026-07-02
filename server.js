@@ -4,6 +4,7 @@ const ExcelJS = require('exceljs');
 const path = require('path');
 const fs = require('fs');
 const { Pool } = require('pg');
+// googleapis удалён
 
 const app = express();
 const PORT = 3000;
@@ -14,6 +15,14 @@ app.use(express.static('public'));
 const TEMPLATE_SV005 = path.join(__dirname, 'templateSV005_test.xlsx');
 const TEMPLATE_SV004 = path.join(__dirname, 'templateSV004_test.xlsx');
 
+// ---------- Проверка переменных окружения ----------
+if (!process.env.API_KEY || !process.env.API_BASE_URL) {
+    console.warn('⚠️ Внимание: API_KEY или API_BASE_URL не заданы в .env. Синхронизация и поиск проектов не будут работать.');
+}
+if (!process.env.DB_HOST || !process.env.DB_NAME) {
+    console.warn('⚠️ Внимание: параметры PostgreSQL не заданы. База данных не будет работать.');
+}
+
 // ---------- Подключение к PostgreSQL ----------
 const pool = new Pool({
     host: process.env.DB_HOST,
@@ -23,7 +32,9 @@ const pool = new Pool({
     database: process.env.DB_NAME,
 });
 
-// Создание/обновление таблицы проектов (cf_92, cf_217)
+// ---------- Инициализация Google Drive API (УДАЛЕНО) ----------
+
+// ---------- Создание/обновление таблицы проектов ----------
 async function initDatabase() {
     const createQuery = `
         CREATE TABLE IF NOT EXISTS projects (
@@ -52,21 +63,21 @@ async function initDatabase() {
 
     try {
         await pool.query('ALTER TABLE projects ADD COLUMN IF NOT EXISTS cf_92 TEXT;');
-        console.log('✅ Поле cf_92 добавлено (если отсутствовало)');
+        console.log('✅ Поле cf_92 добавлено');
     } catch (err) {
         console.warn('⚠️ Не удалось добавить cf_92:', err.message);
     }
 
     try {
         await pool.query('ALTER TABLE projects ADD COLUMN IF NOT EXISTS cf_217 TEXT;');
-        console.log('✅ Поле cf_217 добавлено (если отсутствовало)');
+        console.log('✅ Поле cf_217 добавлено');
     } catch (err) {
         console.warn('⚠️ Не удалось добавить cf_217:', err.message);
     }
 }
 initDatabase();
 
-// ---------- Общие утилиты ----------
+// ---------- ОБЩИЕ УТИЛИТЫ ----------
 function getCellText(cell) {
     if (!cell || cell.value === undefined || cell.value === null) return '';
     if (typeof cell.value === 'string') return cell.value;
@@ -134,7 +145,7 @@ function copyBlock(worksheet, sourceStart, sourceEnd, targetStart) {
     return targetStart + rowCount - 1;
 }
 
-// ---------- Автоподгон ширины столбцов ----------
+// ---------- АВТОПОДГОН ШИРИНЫ СТОЛБЦОВ ----------
 function isPlinthSheet(sheetName) {
     const plinthSheetNames = ['Лист1', 'SV777-1 (SV004)'];
     return plinthSheetNames.includes(sheetName);
@@ -169,7 +180,7 @@ function applyAutoFit(workbook) {
     });
 }
 
-// ---------- Блоки для SV005 ----------
+// ---------- БЛОКИ ДЛЯ SV005 ----------
 function getBlocksSV005(worksheet) {
     if (!worksheet) return [];
     const blocks = [];
@@ -222,7 +233,7 @@ function getBlocksSV005(worksheet) {
     return blocks;
 }
 
-// ---------- Блоки для SV004 ----------
+// ---------- БЛОКИ ДЛЯ SV004 ----------
 function getBlocksSV004(worksheet) {
     if (!worksheet) return [];
     const blocks = [];
@@ -264,7 +275,7 @@ function getBlocksSV004(worksheet) {
     return blocks;
 }
 
-// ---------- Заполнение блока SV005 ----------
+// ---------- ЗАПОЛНЕНИЕ БЛОКА SV005 ----------
 async function fillPlinthBlockSV005(worksheet, startRow, blockType, plinthData, globalModel) {
     function findRowWithLabel(labelPart) {
         for (let r = startRow; r <= startRow + 15; r++) {
@@ -401,7 +412,7 @@ async function fillPlinthBlockSV005(worksheet, startRow, blockType, plinthData, 
     }
 }
 
-// ---------- Заполнение блока SV004 ----------
+// ---------- ЗАПОЛНЕНИЕ БЛОКА SV004 ----------
 async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel) {
     const groups = [
         { offsetDev: 14, offsetRoom: 15, pins: [0,1,2,3] }
@@ -467,7 +478,7 @@ async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel
     }
 }
 
-// ---------- Заполнение листов шпоргалка и Disp для SV004 ----------
+// ---------- ЗАПОЛНЕНИЕ ЛИСТОВ ШПОРГАЛКА И DISP ДЛЯ SV004 ----------
 function fillSheetsSV004(workbook, boards, globalModel) {
     const maxPlinthsPerController = 16;
     const allPlinths = [];
@@ -598,7 +609,7 @@ function fillSheetsSV004(workbook, boards, globalModel) {
     }
 }
 
-// ---------- Создание листов "шпоргалка" и "Шпора общая" для SV005 ----------
+// ---------- СОЗДАНИЕ ЛИСТОВ "ШПОРГАЛКА" И "ШПОРА ОБЩАЯ" ДЛЯ SV005 ----------
 function createSheetsSV005(workbook, boards, globalModel) {
     const sheetNames = workbook.worksheets.map(s => s.name);
     if (sheetNames.includes('шпоргалка')) workbook.removeWorksheet('шпоргалка');
@@ -745,7 +756,7 @@ function createSheetsSV005(workbook, boards, globalModel) {
     }
 }
 
-// ---------- Очистка адреса ----------
+// ---------- ОЧИСТКА АДРЕСА ----------
 function extractAddressPart(fullName) {
     if (!fullName) return '';
     let address = fullName;
@@ -775,11 +786,17 @@ function extractAddressPart(fullName) {
     return address;
 }
 
-// ---------- Сохранение файла ----------
+// ---------- СОХРАНЕНИЕ НА СЕТЕВОЙ ДИСК ----------
 function saveFileToNetwork(buffer, fileName, projectName) {
+    const basePath = process.env.BASE_NETWORK_PATH || '//fileserver/!_Work/for Druzhinin Anton/vhd';
     const safeProjectName = projectName.replace(/[\\/:*?"<>|]/g, '_');
-    const basePath = '//fileserver/!_Work/for Druzhinin Anton/vhd/Расшивки';
-    const projectFolder = path.join(basePath, safeProjectName);
+    const projectFolder = path.join(
+        basePath,
+        '1.Техническая документация',
+        '1.2.Проект',
+        '1.2.3.Расшивки',
+        safeProjectName
+    );
     const fullPath = path.join(projectFolder, fileName);
 
     if (!fs.existsSync(projectFolder)) {
@@ -790,7 +807,9 @@ function saveFileToNetwork(buffer, fileName, projectName) {
     return fullPath;
 }
 
-// ---------- Маршрут SV005 ----------
+// ---------- ЗАГРУЗКА НА GOOGLE DRIVE (УДАЛЕНО) ----------
+
+// ---------- МАРШРУТЫ ГЕНЕРАЦИИ ----------
 app.post('/generate-sv005', async (req, res) => {
     try {
         const { address, globalModel, boards } = req.body;
@@ -939,7 +958,6 @@ app.post('/generate-sv005', async (req, res) => {
     }
 });
 
-// ---------- Маршрут SV004 ----------
 app.post('/generate-sv004', async (req, res) => {
     try {
         const { address, globalModel, boards } = req.body;
@@ -1081,13 +1099,14 @@ app.post('/generate-sv004', async (req, res) => {
     }
 });
 
-// ---------- Синхронизация с SSE (прогресс) ----------
+// ---------- СИНХРОНИЗАЦИЯ С SSE ----------
 app.get('/api/projects/sync-stream', async (req, res) => {
     const apiKey = process.env.API_KEY;
     const baseUrl = process.env.API_BASE_URL;
 
     if (!apiKey || !baseUrl) {
-        res.status(500).json({ error: 'Не заданы API_KEY или API_BASE_URL в .env' });
+        res.writeHead(500, { 'Content-Type': 'text/plain' });
+        res.end('Ошибка: API_KEY или API_BASE_URL не заданы в .env');
         return;
     }
 
@@ -1099,7 +1118,11 @@ app.get('/api/projects/sync-stream', async (req, res) => {
     });
 
     const sendEvent = (data) => {
-        res.write(`data: ${JSON.stringify(data)}\n\n`);
+        try {
+            res.write(`data: ${JSON.stringify(data)}\n\n`);
+        } catch (err) {
+            console.error('Ошибка отправки SSE:', err);
+        }
     };
 
     try {
@@ -1186,7 +1209,7 @@ app.get('/api/projects/sync-stream', async (req, res) => {
     }
 });
 
-// ---------- Обычный POST для обратной совместимости (без прогресса) ----------
+// ---------- ОБЫЧНЫЙ POST ДЛЯ ОБРАТНОЙ СОВМЕСТИМОСТИ ----------
 app.post('/api/projects/sync', async (req, res) => {
     const apiKey = process.env.API_KEY;
     const baseUrl = process.env.API_BASE_URL;
@@ -1267,7 +1290,7 @@ app.post('/api/projects/sync', async (req, res) => {
     }
 });
 
-// ---------- Обновление статуса ----------
+// ---------- ОБНОВЛЕНИЕ СТАТУСА ----------
 app.post('/api/projects/update-status', async (req, res) => {
     const { projects } = req.body;
 
@@ -1323,7 +1346,7 @@ app.post('/api/projects/update-status', async (req, res) => {
     }
 });
 
-// ---------- Получение проектов ----------
+// ---------- ПОЛУЧЕНИЕ ПРОЕКТОВ ----------
 app.get('/api/projects', async (req, res) => {
     const { onlyNotDownloaded } = req.query;
     try {
@@ -1341,10 +1364,10 @@ app.get('/api/projects', async (req, res) => {
     }
 });
 
-// ---------- Скачивание файла ----------
+// ---------- СКАЧИВАНИЕ ФАЙЛА ----------
 app.get('/api/projects/download/:fileName', async (req, res) => {
     const { fileName } = req.params;
-    const basePath = '//fileserver/!_Work/for Druzhinin Anton/vhd/Расшивки';
+    const basePath = process.env.BASE_NETWORK_PATH || '//fileserver/!_Work/for Druzhinin Anton/vhd';
 
     try {
         const result = await pool.query(
@@ -1402,7 +1425,7 @@ app.get('/api/projects/download/:fileName', async (req, res) => {
     });
 });
 
-// ---------- Поиск проектов ----------
+// ---------- ПОИСК ПРОЕКТОВ ----------
 app.get('/api/projects/search', async (req, res) => {
     const { search, showArchived } = req.query;
     const apiKey = process.env.API_KEY;
@@ -1424,6 +1447,7 @@ app.get('/api/projects/search', async (req, res) => {
 
         while (true) {
             const url = `${baseUrl}?api_key=${apiKey}&page=${page}&per_page=${perPage}`;
+            console.log(`🔍 Поиск: запрос к ${url}`);
             const response = await fetch(url);
             if (!response.ok) {
                 const errorText = await response.text();
@@ -1468,7 +1492,7 @@ app.get('/api/projects/search', async (req, res) => {
     }
 });
 
-// Запуск
+// ---------- ЗАПУСК ----------
 app.listen(PORT, () => {
-    console.log(`Сервер запущен: http://localhost:${PORT}`);
+    console.log(`✅ Сервер запущен: http://localhost:${PORT}`);
 });
