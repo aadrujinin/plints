@@ -357,7 +357,6 @@
             color: #6f7885;
             margin-top: 1px;
         }
-        /* Стили для SV004: две колонки в одной строке */
         .terminal .device-row {
             display: flex;
             gap: 4px;
@@ -495,7 +494,6 @@
         .unused-pin {
             opacity: 0.5;
         }
-        /* Адаптивность для очень узких экранов */
         @media (max-width: 1200px) {
             .container { padding: 12px; }
             .terminal select { font-size: 0.5rem; min-width: 20px; }
@@ -503,8 +501,6 @@
             .cable-field input { font-size: 0.55rem; height: 18px; }
             .cable-field label { font-size: 0.55rem; }
         }
-
-        /* Модальное окно */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -599,6 +595,14 @@
         }
         .download-btn:hover {
             background: #1e4f2c;
+        }
+        .cf-link {
+            color: #1e4663;
+            text-decoration: underline;
+            word-break: break-all;
+        }
+        .cf-link:hover {
+            color: #0f2b4f;
         }
     </style>
 </head>
@@ -1450,7 +1454,7 @@
         }
     }
 
-    // ---------- Просмотр проектов из БД (с группировкой) ----------
+    // ---------- Просмотр проектов из БД (с группировкой и cf_92) ----------
     async function showProjectsFromDb() {
         const modal = document.getElementById('projectsModal');
         const container = document.getElementById('projectsListContainer');
@@ -1479,7 +1483,8 @@
                         name: p.name,
                         files: [],
                         is_archive: p.is_archive,
-                        expanded_downloaded: false
+                        expanded_downloaded: false,
+                        cf_92: p.cf_92 || null
                     };
                 }
                 grouped[p.name].files.push({
@@ -1490,6 +1495,10 @@
                 if (p.expanded_downloaded) {
                     grouped[p.name].expanded_downloaded = true;
                 }
+                // обновляем cf_92 (может быть разный у файлов, но берем первый не null)
+                if (p.cf_92 && !grouped[p.name].cf_92) {
+                    grouped[p.name].cf_92 = p.cf_92;
+                }
             });
 
             let html = `
@@ -1499,6 +1508,7 @@
                             <th>Название проекта</th>
                             <th>Архивный</th>
                             <th>Расшивки выгружены</th>
+                            <th>Ссылка на Google Диск</th>
                             <th>Файлы</th>
                         </tr>
                     </thead>
@@ -1510,8 +1520,8 @@
                 const statusClass = group.expanded_downloaded ? 'status-downloaded' : 'status-not-downloaded';
                 const statusText = group.expanded_downloaded ? '✅ Выгружены' : '❌ Не выгружены';
                 const archiveText = group.is_archive ? 'Да' : 'Нет';
+                const cfLink = group.cf_92 ? `<a href="${escapeHtml(group.cf_92)}" target="_blank" class="cf-link">${escapeHtml(group.cf_92)}</a>` : '—';
 
-                // Собираем кнопки для каждого файла
                 let fileButtons = '';
                 group.files.forEach(f => {
                     if (f.file_name) {
@@ -1525,6 +1535,7 @@
                         <td><strong>${escapeHtml(name)}</strong></td>
                         <td>${archiveText}</td>
                         <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                        <td>${cfLink}</td>
                         <td>${fileButtons}</td>
                     </tr>
                 `;
@@ -1533,7 +1544,7 @@
             html += `</tbody></table>`;
             container.innerHTML = html;
 
-            // Навешиваем обработчики на все кнопки скачивания
+            // Обработчики скачивания
             container.querySelectorAll('.download-btn').forEach(btn => {
                 btn.addEventListener('click', async function() {
                     const fileName = this.dataset.filename;
@@ -1618,18 +1629,15 @@
             const a = document.createElement('a');
             a.href = url;
 
-            // ---------- Парсинг Content-Disposition (RFC 5987) ----------
             const contentDisposition = response.headers.get('Content-Disposition');
-            console.log('📄 Content-Disposition:', contentDisposition); // отладка
+            console.log('📄 Content-Disposition:', contentDisposition);
             let filename = null;
             if (contentDisposition) {
-                // Пробуем RFC 5987: filename*=UTF-8''...
                 let match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
                 if (match) {
                     filename = decodeURIComponent(match[1]);
                     console.log('✅ Имя получено из filename*=:', filename);
                 } else {
-                    // Пробуем просто filename="..."
                     match = contentDisposition.match(/filename="([^"]+)"/);
                     if (match) {
                         filename = match[1];
@@ -1637,7 +1645,6 @@
                     }
                 }
             }
-            // Если не удалось распарсить – берём имя из X-File-Path (последняя часть пути)
             if (!filename) {
                 const filePathHeader = response.headers.get('X-File-Path');
                 if (filePathHeader) {
@@ -1651,28 +1658,24 @@
                     }
                 }
             }
-            // Последний запасной вариант – генерируем имя сами (но уже без префикса)
-			if (!filename) {
-			// Берём адресную часть без префикса (эмулируем серверную логику)
-				let addressPart = data.address;
-				const eqIndex = addressPart.indexOf('=');
-				if (eqIndex !== -1) {
-					addressPart = addressPart.substring(eqIndex + 1).trim();
-			}
-    // Удаляем префикс с учётом кавычек (как на сервере)
-    addressPart = addressPart.replace(/^ПАО\s*_?\s*["']?ВЫМПЕЛКОМ["']?\s*_?\s*/i, '').trim();
-    const safeAddress = addressPart.replace(/[\\/:*?"<>|]/g, '_');
-    const dateStr = new Date().toISOString().slice(0, 10);
-    filename = `${safeAddress}_${dateStr}_${targetType}.xlsx`;
-    console.log('⚠️ Использован запасной вариант имени:', filename);
-}
+            if (!filename) {
+                let addressPart = data.address;
+                const eqIndex = addressPart.indexOf('=');
+                if (eqIndex !== -1) {
+                    addressPart = addressPart.substring(eqIndex + 1).trim();
+                }
+                addressPart = addressPart.replace(/^ПАО\s*_?\s*["']?ВЫМПЕЛКОМ["']?\s*_?\s*/i, '').trim();
+                const safeAddress = addressPart.replace(/[\\/:*?"<>|]/g, '_');
+                const dateStr = new Date().toISOString().slice(0, 10);
+                filename = `${safeAddress}_${dateStr}_${targetType}.xlsx`;
+                console.log('⚠️ Использован запасной вариант имени:', filename);
+            }
             a.download = filename;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
 
-            // Извлекаем путь к файлу из заголовка
             const filePathHeader = response.headers.get('X-File-Path');
             let filePath = null;
             if (filePathHeader) {
@@ -1683,7 +1686,6 @@
                 }
             }
 
-            // Запоминаем проект для записи в БД
             const projectEntry = {
                 name: data.address,
                 fileName: filename,
@@ -1747,7 +1749,6 @@
         setTimeout(() => { msgDiv.innerHTML = ''; }, 4000);
     }
 
-    // ---------- Закрытие модального окна ----------
     document.getElementById('closeProjectsModal').addEventListener('click', function() {
         document.getElementById('projectsModal').classList.remove('active');
     });
