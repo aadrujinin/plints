@@ -596,6 +596,23 @@ function createSheetsSV005(workbook, boards, globalModel) {
     }
 }
 
+// ---------- Функция для извлечения адресной части (удаляем префикс "ПАО _ВЫМПЕЛКОМ_") ----------
+function extractAddressPart(fullName) {
+    if (!fullName) return '';
+    const eqIndex = fullName.indexOf('=');
+    let address = fullName;
+    if (eqIndex !== -1 && eqIndex < fullName.length - 1) {
+        address = fullName.substring(eqIndex + 1).trim();
+    }
+    // Удаляем префикс "ПАО _ВЫМПЕЛКОМ_ " (с учётом пробелов и подчёркиваний)
+    address = address.replace(/^ПАО\s*_?\s*ВЫМПЕЛКОМ\s*_?\s*/i, '');
+    // Убираем лишние пробелы
+    address = address.replace(/\s+/g, ' ').trim();
+    // Убираем начальные и конечные кавычки, скобки если есть
+    address = address.replace(/^["']+|["']+$/g, '');
+    return address;
+}
+
 // ---------- Вспомогательная функция для сохранения файла на сетевой путь ----------
 function saveFileToNetwork(buffer, fileName, projectName) {
     const safeProjectName = projectName.replace(/[\\/:*?"<>|]/g, '_');
@@ -742,16 +759,17 @@ app.post('/generate-sv005', async (req, res) => {
         applyAutoFit(workbook);
 
         const buffer = await workbook.xlsx.writeBuffer();
-        const dateStr = new Date().toISOString().slice(0, 10);
-        const safeAddress = address.replace(/[\\/:*?"<>|]/g, '_');
-        const filename = `${safeAddress}_SV005_${dateStr}.xlsx`;
 
-        // Сохраняем файл в подпапку проекта
+        const addressPart = extractAddressPart(address);
+        const safeAddress = addressPart.replace(/[\\/:*?"<>|]/g, '_');
+        const dateStr = new Date().toISOString().slice(0, 10);
+        const filename = `${safeAddress}_${dateStr}_SV005.xlsx`;
+
         const filePath = saveFileToNetwork(buffer, filename, address);
 
-        // Отправляем файл клиенту, в заголовке передаём путь
+        // ---------- ИСПРАВЛЕННЫЙ ЗАГОЛОВОК: только filename*= ----------
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+        res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
         res.setHeader('X-File-Path', encodeURIComponent(filePath));
         res.send(buffer);
     } catch (err) {
@@ -849,14 +867,17 @@ app.post('/generate-sv004', async (req, res) => {
         applyAutoFit(workbook);
 
         const buffer = await workbook.xlsx.writeBuffer();
+
+        const addressPart = extractAddressPart(address);
+        const safeAddress = addressPart.replace(/[\\/:*?"<>|]/g, '_');
         const dateStr = new Date().toISOString().slice(0, 10);
-        const safeAddress = address.replace(/[\\/:*?"<>|]/g, '_');
-        const filename = `${safeAddress}_SV004_${dateStr}.xlsx`;
+        const filename = `${safeAddress}_${dateStr}_SV004.xlsx`;
 
         const filePath = saveFileToNetwork(buffer, filename, address);
 
+        // ---------- ИСПРАВЛЕННЫЙ ЗАГОЛОВОК: только filename*= ----------
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+        res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
         res.setHeader('X-File-Path', encodeURIComponent(filePath));
         res.send(buffer);
     } catch (err) {
@@ -950,25 +971,28 @@ app.post('/api/projects/update-status', async (req, res) => {
         try {
             await client.query('BEGIN');
             for (const item of projects) {
-                // Ищем проект по имени
-                const result = await client.query(
-                    'SELECT id FROM projects WHERE name = $1',
-                    [item.name]
+                const { name, fileName, filePath } = item;
+                if (!fileName) continue;
+
+                const existing = await client.query(
+                    'SELECT id FROM projects WHERE file_name = $1',
+                    [fileName]
                 );
-                let id;
-                if (result.rows.length > 0) {
-                    id = result.rows[0].id;
+                if (existing.rows.length > 0) {
                     await client.query(
-                        'UPDATE projects SET expanded_downloaded = true, file_name = $1, file_path = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
-                        [item.fileName || null, item.filePath || null, id]
+                        `UPDATE projects 
+                         SET name = $1, file_path = $2, expanded_downloaded = true, updated_at = CURRENT_TIMESTAMP 
+                         WHERE file_name = $3`,
+                        [name, filePath, fileName]
                     );
                     updatedCount++;
                 } else {
-                    // Проекта нет — создаём новый с базовыми данными
-                    const tempId = -Date.now() + Math.floor(Math.random() * 1000);
+                    const tempId = -Date.now() - Math.floor(Math.random() * 1000);
                     await client.query(
-                        'INSERT INTO projects (id, name, is_archive, expanded_downloaded, file_name, file_path) VALUES ($1, $2, $3, $4, $5, $6)',
-                        [tempId, item.name, false, true, item.fileName || null, item.filePath || null]
+                        `INSERT INTO projects 
+                         (id, name, is_archive, expanded_downloaded, file_name, file_path) 
+                         VALUES ($1, $2, $3, $4, $5, $6)`,
+                        [tempId, name, false, true, fileName, filePath]
                     );
                     createdCount++;
                 }
@@ -1006,10 +1030,12 @@ app.get('/api/projects', async (req, res) => {
     }
 });
 
-// ---------- МАРШРУТ: скачивание файла по имени ----------
+// ---------- МАРШРУТ: скачивание файла по имени (с улучшенным логированием) ----------
 app.get('/api/projects/download/:fileName', async (req, res) => {
     const { fileName } = req.params;
     const basePath = '//fileserver/!_Work/for Druzhinin Anton/vhd/Расшивки';
+
+    console.log(`📥 Запрос на скачивание: ${fileName}`);
 
     // 1. Сначала ищем путь в БД по имени файла
     try {
@@ -1019,14 +1045,20 @@ app.get('/api/projects/download/:fileName', async (req, res) => {
         );
         if (result.rows.length > 0) {
             const filePath = result.rows[0].file_path;
+            console.log(`   Найден путь в БД: ${filePath}`);
             if (fs.existsSync(filePath)) {
+                console.log(`   ✅ Файл существует, отдаём`);
                 return res.download(filePath, fileName, (err) => {
                     if (err) {
                         console.error('Ошибка при скачивании файла:', err);
                         res.status(500).json({ error: 'Ошибка при скачивании файла' });
                     }
                 });
+            } else {
+                console.log(`   ❌ Файл по пути из БД не найден, начинаем рекурсивный поиск`);
             }
+        } else {
+            console.log(`   Запись с fileName=${fileName} не найдена в БД, начинаем рекурсивный поиск`);
         }
     } catch (err) {
         console.warn('Ошибка поиска пути в БД:', err.message);
@@ -1045,6 +1077,7 @@ app.get('/api/projects/download/:fileName', async (req, res) => {
                         walk(full);
                     } else if (file === fileName) {
                         foundPath = full;
+                        console.log(`   🔍 Найден рекурсивно: ${foundPath}`);
                         return;
                     }
                 } catch (e) {
@@ -1063,9 +1096,11 @@ app.get('/api/projects/download/:fileName', async (req, res) => {
     }
 
     if (!foundPath) {
+        console.log(`   ❌ Файл ${fileName} не найден нигде`);
         return res.status(404).json({ error: 'Файл не найден' });
     }
 
+    console.log(`   ✅ Отдаём файл: ${foundPath}`);
     res.download(foundPath, fileName, (err) => {
         if (err) {
             console.error('Ошибка при скачивании файла:', err);

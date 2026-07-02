@@ -1450,7 +1450,7 @@
         }
     }
 
-    // ---------- Просмотр проектов из БД ----------
+    // ---------- Просмотр проектов из БД (с группировкой) ----------
     async function showProjectsFromDb() {
         const modal = document.getElementById('projectsModal');
         const container = document.getElementById('projectsListContainer');
@@ -1471,39 +1471,69 @@
                 return;
             }
 
+            // Группируем записи по имени проекта
+            const grouped = {};
+            projects.forEach(p => {
+                if (!grouped[p.name]) {
+                    grouped[p.name] = {
+                        name: p.name,
+                        files: [],
+                        is_archive: p.is_archive,
+                        expanded_downloaded: false
+                    };
+                }
+                grouped[p.name].files.push({
+                    file_name: p.file_name,
+                    file_path: p.file_path,
+                    expanded_downloaded: p.expanded_downloaded
+                });
+                if (p.expanded_downloaded) {
+                    grouped[p.name].expanded_downloaded = true;
+                }
+            });
+
             let html = `
                 <table class="projects-table">
                     <thead>
                         <tr>
-                            <th>ID</th>
                             <th>Название проекта</th>
                             <th>Архивный</th>
                             <th>Расшивки выгружены</th>
-                            <th>Имя файла</th>
-                            <th>Действие</th>
+                            <th>Файлы</th>
                         </tr>
                     </thead>
                     <tbody>
             `;
-            for (const p of projects) {
-                const statusClass = p.expanded_downloaded ? 'status-downloaded' : 'status-not-downloaded';
-                const statusText = p.expanded_downloaded ? '✅ Выгружены' : '❌ Не выгружены';
-                const archiveText = p.is_archive ? 'Да' : 'Нет';
-                const fileLink = p.file_name ? `<button class="download-btn" data-filename="${p.file_name}">📥 Скачать</button>` : '—';
+
+            for (const name in grouped) {
+                const group = grouped[name];
+                const statusClass = group.expanded_downloaded ? 'status-downloaded' : 'status-not-downloaded';
+                const statusText = group.expanded_downloaded ? '✅ Выгружены' : '❌ Не выгружены';
+                const archiveText = group.is_archive ? 'Да' : 'Нет';
+
+                // Собираем кнопки для каждого файла
+                let fileButtons = '';
+                group.files.forEach(f => {
+                    if (f.file_name) {
+                        fileButtons += `<button class="download-btn" data-filename="${f.file_name}" style="margin-right:6px;">📥 ${f.file_name}</button>`;
+                    }
+                });
+                if (!fileButtons) fileButtons = '—';
+
                 html += `
                     <tr>
-                        <td>${p.id}</td>
-                        <td>${escapeHtml(p.name)}</td>
+                        <td><strong>${escapeHtml(name)}</strong></td>
                         <td>${archiveText}</td>
                         <td><span class="status-badge ${statusClass}">${statusText}</span></td>
-                        <td>${p.file_name ? escapeHtml(p.file_name) : '—'}</td>
-                        <td>${fileLink}</td>
+                        <td>${fileButtons}</td>
                     </tr>
                 `;
             }
+
             html += `</tbody></table>`;
             container.innerHTML = html;
 
+            // Навешиваем обработчики на все кнопки скачивания
             container.querySelectorAll('.download-btn').forEach(btn => {
                 btn.addEventListener('click', async function() {
                     const fileName = this.dataset.filename;
@@ -1587,11 +1617,26 @@
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
+
+            // ---------- Парсинг Content-Disposition (RFC 5987) ----------
             const contentDisposition = response.headers.get('Content-Disposition');
-            let filename = `${data.address}_${targetType}_${new Date().toISOString().slice(0,10)}.xlsx`;
+            let filename = null;
             if (contentDisposition) {
-                const match = contentDisposition.match(/filename\*=UTF-8''(.+)/);
-                if (match) filename = decodeURIComponent(match[1]);
+                // Пробуем RFC 5987: filename*=UTF-8''...
+                let match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
+                if (match) {
+                    filename = decodeURIComponent(match[1]);
+                } else {
+                    // Пробуем просто filename="..."
+                    match = contentDisposition.match(/filename="([^"]+)"/);
+                    if (match) {
+                        filename = match[1];
+                    }
+                }
+            }
+            // fallback на случай, если не удалось распарсить
+            if (!filename) {
+                filename = `${data.address}_${targetType}_${new Date().toISOString().slice(0,10)}.xlsx`;
             }
             a.download = filename;
             document.body.appendChild(a);
@@ -1616,9 +1661,8 @@
                 fileName: filename,
                 filePath: filePath
             };
-            if (!lastGeneratedProjects.some(p => p.name === projectEntry.name)) {
-                lastGeneratedProjects.push(projectEntry);
-            }
+            lastGeneratedProjects.push(projectEntry);
+
             showMessage(`✅ Файл для ${targetType} успешно сгенерирован! Нажмите "Записать в БД" для сохранения статуса.`, 'success');
         } catch (err) {
             showMessage(`Ошибка: ${err.message}`, 'error');
