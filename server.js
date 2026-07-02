@@ -3,6 +3,7 @@ const express = require('express');
 const ExcelJS = require('exceljs');
 const path = require('path');
 const fs = require('fs');
+const { Pool } = require('pg');
 
 const app = express();
 const PORT = 3000;
@@ -12,6 +13,42 @@ app.use(express.static('public'));
 
 const TEMPLATE_SV005 = path.join(__dirname, 'templateSV005_test.xlsx');
 const TEMPLATE_SV004 = path.join(__dirname, 'templateSV004_test.xlsx');
+
+// ---------- Подключение к PostgreSQL ----------
+const pool = new Pool({
+    host: process.env.DB_HOST,
+    port: process.env.DB_PORT,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+});
+
+// Создание/обновление таблицы проектов
+async function initDatabase() {
+    const createQuery = `
+        CREATE TABLE IF NOT EXISTS projects (
+            id BIGINT PRIMARY KEY,
+            name TEXT NOT NULL,
+            is_archive BOOLEAN DEFAULT FALSE,
+            expanded_downloaded BOOLEAN DEFAULT FALSE,
+            file_name TEXT,
+            file_path TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    `;
+    await pool.query(createQuery);
+    console.log('✅ Таблица projects проверена/создана');
+
+    try {
+        await pool.query('ALTER TABLE projects ALTER COLUMN id TYPE BIGINT;');
+        console.log('✅ Тип колонки id изменён на BIGINT (если был INTEGER)');
+    } catch (err) {
+        if (err.code !== '42704' && !err.message.includes('already exists')) {
+            console.warn('⚠️ Не удалось изменить тип id (возможно, уже BIGINT):', err.message);
+        }
+    }
+}
+initDatabase();
 
 // ---------- Общие утилиты ----------
 function getCellText(cell) {
@@ -280,7 +317,6 @@ async function fillPlinthBlockSV005(worksheet, startRow, blockType, plinthData, 
         worksheet.getCell(`F${devicesRow}`).value = '';
     }
 
-    // Сохраняем метку устройства для использования в шпоргалке
     plinthData.deviceLabel = deviceLabel;
 
     const hasLock = Object.values(tm).includes('lock');
@@ -326,7 +362,6 @@ async function fillPlinthBlockSV005(worksheet, startRow, blockType, plinthData, 
 
 // ---------- Заполнение блока SV004 (один плинт) ----------
 async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel) {
-    // Только одна группа пинов 0–3
     const groups = [
         { offsetDev: 14, offsetRoom: 15, pins: [0,1,2,3] }
     ];
@@ -373,7 +408,6 @@ async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel
             worksheet.getCell(`${colDevice}${devRow}`).value = device;
             worksheet.getCell(`${colCable}${devRow}`).value = cable;
 
-            // Запись "пом." и номера помещения в строку помещений
             worksheet.getCell(`${colDevice}${roomRow}`).value = room ? 'пом.' : '';
             worksheet.getCell(`${colCable}${roomRow}`).value = room ? room : '';
         }
@@ -419,7 +453,6 @@ function createSheetsSV004(workbook, boards, globalModel) {
         rowIdx++;
     }
 
-    // Лист Disp остаётся без изменений
     const dispSheet = workbook.addWorksheet('Disp', { properties: { tabColor: { argb: 'FFE0E0FF' } } });
     dispSheet.getCell('K2').value = 'Display panel';
     const cheatRows = cheatSheet.rowCount;
@@ -496,7 +529,6 @@ function createSheetsSV005(workbook, boards, globalModel) {
         cheatSheet.getCell(`F${rowD1}`).value = board.skud1 ? `СКД.${board.skud1}` : '';
         rowIdx++;
 
-        // Объединение G для R1 и D1, заливка красным
         cheatSheet.mergeCells(`G${rowR1}:G${rowD1}`);
         cheatSheet.getCell(`G${rowR1}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0000' } };
 
@@ -538,23 +570,15 @@ function createSheetsSV005(workbook, boards, globalModel) {
         cheatSheet.getCell(`F${rowD2}`).value = board.skud2 ? `СКД.${board.skud2}` : '';
         rowIdx++;
 
-        // Заливка для выходного плинта:
-        // - R2: оранжевый, если считыватель вх; красный, если вых
-        // - D2: всегда красный (если считыватель присутствует)
         if (hasReader2) {
-            // Цвет для R2
             const fillColorR2 = (board.plinth2.deviceLabel === 'Считыватель вх') ? 'FFA500' : 'FF0000';
             cheatSheet.getCell(`G${rowR2}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillColorR2 } };
-            // D2 всегда красный
             cheatSheet.getCell(`G${rowD2}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0000' } };
         }
-        // если считывателя нет – заливка не применяется
 
-        // пустая строка между платами
         rowIdx++;
     }
 
-    // Лист "Шпора общая" – копия значений из "шпоргалка"
     const commonSheet = workbook.addWorksheet('Шпора общая', { properties: { tabColor: { argb: 'FFE0E0FF' } } });
     const cheatRows = cheatSheet.rowCount;
     const cheatCols = cheatSheet.columnCount || 7;
@@ -570,6 +594,21 @@ function createSheetsSV005(workbook, boards, globalModel) {
             }
         }
     }
+}
+
+// ---------- Вспомогательная функция для сохранения файла на сетевой путь ----------
+function saveFileToNetwork(buffer, fileName, projectName) {
+    const safeProjectName = projectName.replace(/[\\/:*?"<>|]/g, '_');
+    const basePath = '//fileserver/!_Work/for Druzhinin Anton/vhd/Расшивки';
+    const projectFolder = path.join(basePath, safeProjectName);
+    const fullPath = path.join(projectFolder, fileName);
+
+    if (!fs.existsSync(projectFolder)) {
+        fs.mkdirSync(projectFolder, { recursive: true });
+    }
+
+    fs.writeFileSync(fullPath, buffer);
+    return fullPath;
 }
 
 // ---------- Маршрут для SV005 ----------
@@ -706,8 +745,14 @@ app.post('/generate-sv005', async (req, res) => {
         const dateStr = new Date().toISOString().slice(0, 10);
         const safeAddress = address.replace(/[\\/:*?"<>|]/g, '_');
         const filename = `${safeAddress}_SV005_${dateStr}.xlsx`;
+
+        // Сохраняем файл в подпапку проекта
+        const filePath = saveFileToNetwork(buffer, filename, address);
+
+        // Отправляем файл клиенту, в заголовке передаём путь
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+        res.setHeader('X-File-Path', encodeURIComponent(filePath));
         res.send(buffer);
     } catch (err) {
         console.error(err);
@@ -807,8 +852,12 @@ app.post('/generate-sv004', async (req, res) => {
         const dateStr = new Date().toISOString().slice(0, 10);
         const safeAddress = address.replace(/[\\/:*?"<>|]/g, '_');
         const filename = `${safeAddress}_SV004_${dateStr}.xlsx`;
+
+        const filePath = saveFileToNetwork(buffer, filename, address);
+
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+        res.setHeader('X-File-Path', encodeURIComponent(filePath));
         res.send(buffer);
     } catch (err) {
         console.error(err);
@@ -816,7 +865,216 @@ app.post('/generate-sv004', async (req, res) => {
     }
 });
 
-// ---------- МАРШРУТ: поиск проектов через API AsPro (загружает все страницы) ----------
+// ---------- МАРШРУТ: синхронизация проектов из AsPro в БД ----------
+app.post('/api/projects/sync', async (req, res) => {
+    const apiKey = process.env.API_KEY;
+    const baseUrl = process.env.API_BASE_URL;
+
+    if (!apiKey || !baseUrl) {
+        return res.status(500).json({ error: 'Не заданы API_KEY или API_BASE_URL в .env' });
+    }
+
+    try {
+        let allProjects = [];
+        let page = 1;
+        const perPage = 50;
+        let total = 0;
+
+        while (true) {
+            const url = `${baseUrl}?api_key=${apiKey}&page=${page}&per_page=${perPage}`;
+            console.log(`Синхронизация: запрос ${url}`);
+            const response = await fetch(url);
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`API вернул ${response.status}: ${errorText}`);
+            }
+            const data = await response.json();
+            const items = data.response?.items || [];
+            total = data.response?.total || 0;
+            allProjects = allProjects.concat(items);
+
+            if (allProjects.length >= total) break;
+            if (items.length < perPage) break;
+            page++;
+            if (page > 30) break;
+        }
+
+        console.log(`Синхронизация: загружено ${allProjects.length} проектов`);
+
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            for (const project of allProjects) {
+                const { id, name, is_archive } = project;
+                const isArchiveBool = (is_archive === 1 || is_archive === true);
+                const check = await client.query('SELECT id FROM projects WHERE id = $1', [id]);
+                if (check.rows.length === 0) {
+                    await client.query(
+                        'INSERT INTO projects (id, name, is_archive, expanded_downloaded) VALUES ($1, $2, $3, $4)',
+                        [id, name, isArchiveBool, false]
+                    );
+                } else {
+                    await client.query(
+                        'UPDATE projects SET name = $1, is_archive = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
+                        [name, isArchiveBool, id]
+                    );
+                }
+            }
+            await client.query('COMMIT');
+        } catch (err) {
+            await client.query('ROLLBACK');
+            throw err;
+        } finally {
+            client.release();
+        }
+
+        res.json({ success: true, total: allProjects.length });
+    } catch (error) {
+        console.error('Ошибка синхронизации:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ---------- МАРШРУТ: обновление статуса расшивок ----------
+app.post('/api/projects/update-status', async (req, res) => {
+    const { projects } = req.body;
+
+    if (!projects || !Array.isArray(projects) || projects.length === 0) {
+        return res.status(400).json({ error: 'Не передан список проектов' });
+    }
+
+    try {
+        const client = await pool.connect();
+        let updatedCount = 0;
+        let createdCount = 0;
+        try {
+            await client.query('BEGIN');
+            for (const item of projects) {
+                // Ищем проект по имени
+                const result = await client.query(
+                    'SELECT id FROM projects WHERE name = $1',
+                    [item.name]
+                );
+                let id;
+                if (result.rows.length > 0) {
+                    id = result.rows[0].id;
+                    await client.query(
+                        'UPDATE projects SET expanded_downloaded = true, file_name = $1, file_path = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
+                        [item.fileName || null, item.filePath || null, id]
+                    );
+                    updatedCount++;
+                } else {
+                    // Проекта нет — создаём новый с базовыми данными
+                    const tempId = -Date.now() + Math.floor(Math.random() * 1000);
+                    await client.query(
+                        'INSERT INTO projects (id, name, is_archive, expanded_downloaded, file_name, file_path) VALUES ($1, $2, $3, $4, $5, $6)',
+                        [tempId, item.name, false, true, item.fileName || null, item.filePath || null]
+                    );
+                    createdCount++;
+                }
+            }
+            await client.query('COMMIT');
+        } catch (err) {
+            await client.query('ROLLBACK');
+            throw err;
+        } finally {
+            client.release();
+        }
+
+        res.json({ success: true, updated: updatedCount, created: createdCount });
+    } catch (error) {
+        console.error('Ошибка обновления статуса:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ---------- МАРШРУТ: получение списка проектов из БД ----------
+app.get('/api/projects', async (req, res) => {
+    const { onlyNotDownloaded } = req.query;
+    try {
+        let query = 'SELECT id, name, is_archive, expanded_downloaded, file_name, file_path, updated_at FROM projects';
+        const params = [];
+        if (onlyNotDownloaded === 'true') {
+            query += ' WHERE expanded_downloaded = false';
+        }
+        query += ' ORDER BY name';
+        const result = await pool.query(query, params);
+        res.json({ items: result.rows });
+    } catch (error) {
+        console.error('Ошибка получения проектов:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ---------- МАРШРУТ: скачивание файла по имени ----------
+app.get('/api/projects/download/:fileName', async (req, res) => {
+    const { fileName } = req.params;
+    const basePath = '//fileserver/!_Work/for Druzhinin Anton/vhd/Расшивки';
+
+    // 1. Сначала ищем путь в БД по имени файла
+    try {
+        const result = await pool.query(
+            'SELECT file_path FROM projects WHERE file_name = $1 AND file_path IS NOT NULL',
+            [fileName]
+        );
+        if (result.rows.length > 0) {
+            const filePath = result.rows[0].file_path;
+            if (fs.existsSync(filePath)) {
+                return res.download(filePath, fileName, (err) => {
+                    if (err) {
+                        console.error('Ошибка при скачивании файла:', err);
+                        res.status(500).json({ error: 'Ошибка при скачивании файла' });
+                    }
+                });
+            }
+        }
+    } catch (err) {
+        console.warn('Ошибка поиска пути в БД:', err.message);
+    }
+
+    // 2. Если в БД нет, ищем рекурсивно по папкам (запасной вариант)
+    let foundPath = null;
+    const walk = (dir) => {
+        try {
+            const files = fs.readdirSync(dir);
+            for (const file of files) {
+                const full = path.join(dir, file);
+                try {
+                    const stat = fs.statSync(full);
+                    if (stat.isDirectory()) {
+                        walk(full);
+                    } else if (file === fileName) {
+                        foundPath = full;
+                        return;
+                    }
+                } catch (e) {
+                    // игнорируем ошибки доступа
+                }
+            }
+        } catch (e) {
+            // игнорируем ошибки доступа
+        }
+    };
+    try {
+        walk(basePath);
+    } catch (err) {
+        console.error('Ошибка поиска файла:', err);
+        return res.status(404).json({ error: 'Файл не найден' });
+    }
+
+    if (!foundPath) {
+        return res.status(404).json({ error: 'Файл не найден' });
+    }
+
+    res.download(foundPath, fileName, (err) => {
+        if (err) {
+            console.error('Ошибка при скачивании файла:', err);
+            res.status(500).json({ error: 'Ошибка при скачивании файла' });
+        }
+    });
+});
+
+// ---------- Старый маршрут поиска ----------
 app.get('/api/projects/search', async (req, res) => {
     const { search, showArchived } = req.query;
     const apiKey = process.env.API_KEY;
@@ -831,59 +1089,41 @@ app.get('/api/projects/search', async (req, res) => {
     }
 
     try {
-        // Загружаем все страницы, пока не получим все проекты
         let allProjects = [];
         let page = 1;
-        const perPage = 50; // API ограничивает максимум 50, даже если запросить больше
+        const perPage = 50;
         let total = 0;
 
         while (true) {
             const url = `${baseUrl}?api_key=${apiKey}&page=${page}&per_page=${perPage}`;
             console.log(`Запрос к AsPro API: ${url}`);
-
             const response = await fetch(url);
             if (!response.ok) {
                 const errorText = await response.text();
                 throw new Error(`API вернул ${response.status}: ${errorText}`);
             }
-
             const data = await response.json();
             const items = data.response?.items || [];
             total = data.response?.total || 0;
             allProjects = allProjects.concat(items);
 
-            console.log(`Страница ${page}: получено ${items.length}, всего загружено ${allProjects.length} из ${total}`);
-
-            // Если загрузили все проекты или на странице меньше, чем perPage, значит это последняя
             if (allProjects.length >= total) break;
             if (items.length < perPage) break;
-
             page++;
-            // Защита от бесконечного цикла (максимум 30 страниц)
             if (page > 30) break;
         }
 
-        console.log(`Всего загружено проектов: ${allProjects.length} из ${total}`);
-
-        // Фильтруем по поисковому запросу (в названии проекта)
         const lowerSearch = search.toLowerCase();
         let filteredBySearch = allProjects.filter(p => p.name && p.name.toLowerCase().includes(lowerSearch));
         const totalBeforeArchive = filteredBySearch.length;
 
-        console.log(`Найдено по названию: ${totalBeforeArchive}`);
-
-        // Фильтруем по архиву, если не показываем архивные
         let filteredByArchive = filteredBySearch;
         let archivedCount = 0;
         if (showArchived !== 'true') {
             filteredByArchive = filteredBySearch.filter(p => !p.is_archive);
             archivedCount = totalBeforeArchive - filteredByArchive.length;
-            console.log(`Отфильтровано архивных: ${archivedCount}, осталось: ${filteredByArchive.length}`);
-        } else {
-            console.log(`Показываем все проекты (включая архивные): ${filteredByArchive.length}`);
         }
 
-        // Ограничиваем количество выдаваемых результатов (например, 100)
         const limit = 100;
         if (filteredByArchive.length > limit) {
             filteredByArchive = filteredByArchive.slice(0, limit);

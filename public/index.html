@@ -67,7 +67,7 @@
             position: absolute;
             top: 100%;
             left: 0;
-            width: 900px;
+            width: 600px;
             max-width: 90vw;
             background: white;
             border: 1px solid #ccc;
@@ -138,6 +138,9 @@
         }
         .btn-success {
             background: #2b6e3c;
+        }
+        .btn-success:hover {
+            background: #1e4f2c;
         }
         .btn-secondary {
             background: #4b5563;
@@ -500,6 +503,103 @@
             .cable-field input { font-size: 0.55rem; height: 18px; }
             .cable-field label { font-size: 0.55rem; }
         }
+
+        /* Модальное окно */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-overlay.active {
+            display: flex;
+        }
+        .modal-content {
+            background: white;
+            border-radius: 20px;
+            max-width: 95vw;
+            width: 1200px;
+            max-height: 90vh;
+            overflow: hidden;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #bdd4e7;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+        .modal-header h2 {
+            margin: 0;
+            color: #1e4663;
+        }
+        .modal-close {
+            background: #b91c1c;
+            border: none;
+            color: white;
+            font-size: 1.2rem;
+            border-radius: 30px;
+            padding: 4px 16px;
+            cursor: pointer;
+            height: 36px;
+        }
+        .modal-body {
+            overflow-y: auto;
+            max-height: calc(90vh - 120px);
+        }
+        .projects-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+        .projects-table th {
+            background: #1e4663;
+            color: white;
+            padding: 8px 12px;
+            text-align: left;
+            position: sticky;
+            top: 0;
+        }
+        .projects-table td {
+            padding: 6px 12px;
+            border-bottom: 1px solid #e2edf7;
+        }
+        .projects-table tr:hover {
+            background: #f0f6fe;
+        }
+        .status-badge {
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: bold;
+        }
+        .status-downloaded {
+            background: #dcfce7;
+            color: #15803d;
+        }
+        .status-not-downloaded {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+        .download-btn {
+            background: #2b6e3c;
+            border: none;
+            color: white;
+            padding: 2px 12px;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 0.7rem;
+            height: 28px;
+        }
+        .download-btn:hover {
+            background: #1e4f2c;
+        }
     </style>
 </head>
 <body>
@@ -545,6 +645,9 @@
         <button type="button" id="applyGlobalRoomBtn" class="btn-secondary">🏠 Применить ко всем</button>
         <button type="button" id="deleteAllBoardsBtn" class="btn-danger">🗑 Удалить все платы</button>
         <button type="button" id="toggleAllBoardsBtn" class="btn-secondary">📂 Развернуть/свернуть все</button>
+        <button type="button" id="syncProjectsBtn" class="btn-secondary">🔄 Синхронизировать проекты</button>
+        <button type="button" id="updateDbBtn" class="btn-success">💾 Записать в БД</button>
+        <button type="button" id="showProjectsBtn" class="btn-secondary">📋 Проекты БД</button>
         <button type="button" id="submitExcelTopBtn" class="btn-submit">📎 Excel SV005</button>
         <button type="button" id="submitExcelTopBtnSV004" class="btn-submit btn-submit-sv004">📎 Excel SV004</button>
         <div id="boardCounters">
@@ -563,7 +666,23 @@
         ▼ Для SV005: два плинта (R1/D1 и R2/D2) расположены вертикально (каждый на отдельной строке). Для SV004: один плинт с 4 пинами (0–3), на каждом пине можно выбрать до двух устройств (ИК, КАВ, СМК, ДРС) с указанием количества (по умолчанию 1).<br>
         • Нумерация плинтов сквозная по порядку плат: SV005 даёт 2 плинта, SV004 – 1 плинт.<br>
         • У каждого пина SV004 можно указать свой номер помещения (если не указан, ячейка остаётся пустой).<br>
-        • Кнопка "Копировать вход → выход" дублирует настройки (только для SV005).
+        • Кнопка "Копировать вход → выход" дублирует настройки (только для SV005).<br>
+        • 💾 Кнопка "Записать в БД" сохраняет статус выгрузки расшивок для сгенерированных файлов.
+    </div>
+</div>
+
+<!-- Модальное окно для проектов БД -->
+<div class="modal-overlay" id="projectsModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>📋 Проекты в базе данных</h2>
+            <button class="modal-close" id="closeProjectsModal">✕ Закрыть</button>
+        </div>
+        <div class="modal-body" id="projectsModalBody">
+            <div id="projectsListContainer">
+                <p>Загрузка...</p>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -587,7 +706,6 @@
         { value: "ДРС", label: "ДРС" }
     ];
 
-    // Пресеты для SV005
     const presets = {
         '': [],
         'reader_button': [
@@ -608,6 +726,8 @@
             { terminal: 6, device: 'contact' }
         ]
     };
+
+    let lastGeneratedProjects = [];
 
     function escapeHtml(str) {
         if (!str) return '';
@@ -707,8 +827,7 @@
         return plinthDiv;
     }
 
-    // ---------- Создание элементов для SV004 (один плинт) ----------
-    // Две колонки: слева устройства, справа кабель и помещение
+    // ---------- Создание элементов для SV004 ----------
     function createPlinthElementSV004(side, defaultData, skudValue) {
         const plinthDiv = document.createElement('div');
         plinthDiv.className = 'plinth-card';
@@ -773,7 +892,7 @@
         return plinthDiv;
     }
 
-    // ---------- Функция пересчёта номеров плинтов (сквозная нумерация) ----------
+    // ---------- Функция пересчёта номеров плинтов ----------
     function renumberBoards() {
         const boardDivs = document.querySelectorAll('.board-card');
         let nextPlinthNumber = 1;
@@ -787,14 +906,12 @@
             const plinths = board.querySelectorAll('.plinth-card');
             const rack = board.querySelector('.board-rack').value.trim();
             
-            // Первый плинт
             const plinth1Div = plinths[0];
             const plinth1Number = nextPlinthNumber++;
             const plinth1NumInput = plinth1Div.querySelector('.plinth-number');
             plinth1NumInput.value = plinth1Number;
             updateHolderForPlinth(plinth1Div, rack, plinth1Number);
             
-            // Второй плинт (только для SV005)
             if (boardType === 'SV005' && plinths.length > 1) {
                 const plinth2Div = plinths[1];
                 const plinth2Number = nextPlinthNumber++;
@@ -804,7 +921,6 @@
             }
         });
 
-        // Обновляем счётчики
         updateBoardCounters();
     }
 
@@ -960,7 +1076,6 @@
                 if (room1 && room2) room2.value = room1.value;
                 showMessage('Настройки скопированы', 'success');
             });
-            // Вставляем кнопку копирования между левой и правой частью
             const rightPart = header.querySelector('.header-right');
             header.insertBefore(copyBtn, rightPart);
         }
@@ -1042,7 +1157,6 @@
                         if (device && device !== "") terminalMap1[termNum] = device;
                     });
                 } else {
-                    // SV004
                     const plinth1Terminals = plinth1Div.querySelectorAll('.terminal');
                     plinth1Terminals.forEach(term => {
                         const termNum = parseInt(term.dataset.terminal, 10);
@@ -1063,7 +1177,6 @@
                         if (cable) cableMap1[termNum] = cable;
                         if (room) roomMap1[termNum] = room;
                     });
-                    // Формируем terminalMap1 как строки
                     for (let pin = 0; pin <= 3; pin++) {
                         let parts = [];
                         if (device1Map1[pin]) {
@@ -1198,7 +1311,6 @@
                         if (inp) inp.value = Math.floor(Math.random() * 900 + 100);
                     });
                 } else {
-                    // SV004
                     const devices = ['ИК', 'КАВ', 'СМК', 'ДРС'];
                     const select1s = plinth.querySelectorAll('.device-select1');
                     const select2s = plinth.querySelectorAll('.device-select2');
@@ -1252,7 +1364,6 @@
             plinths.forEach(plinth => {
                 const roomInput = plinth.querySelector('.room-number');
                 if (roomInput) roomInput.value = globalRoom;
-                // room-pin не трогаем, чтобы не затирать индивидуальные
             });
         });
         showMessage(`Помещение "${globalRoom}" применено ко всем плинтам`, 'success');
@@ -1275,11 +1386,9 @@
             showMessage('Нет плат для переключения', 'error');
             return;
         }
-        // Определяем, все ли свёрнуты: если хотя бы одна развёрнута, сворачиваем все
         let allCollapsed = true;
         boards.forEach(board => {
             const content = board.querySelector('.board-content');
-            const btn = board.querySelector('.toggle-board-btn');
             if (content && content.style.display !== 'none') {
                 allCollapsed = false;
             }
@@ -1290,11 +1399,9 @@
             const btn = board.querySelector('.toggle-board-btn');
             if (content && btn) {
                 if (allCollapsed) {
-                    // Все свёрнуты → развернуть все
                     content.style.display = '';
                     btn.textContent = '▼';
                 } else {
-                    // Хотя бы одна развёрнута → свернуть все
                     content.style.display = 'none';
                     btn.textContent = '▶';
                 }
@@ -1303,7 +1410,129 @@
         showMessage(allCollapsed ? 'Все платы развернуты' : 'Все платы свернуты', 'success');
     }
 
-    // ---------- Отправка на сервер ----------
+    // ---------- Синхронизация проектов с БД ----------
+    async function syncProjects() {
+        try {
+            showMessage('🔄 Синхронизация проектов...', 'info');
+            const response = await fetch('/api/projects/sync', { method: 'POST' });
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || 'Ошибка синхронизации');
+            }
+            const data = await response.json();
+            showMessage(`✅ Синхронизировано ${data.total} проектов`, 'success');
+        } catch (error) {
+            showMessage(`Ошибка: ${error.message}`, 'error');
+        }
+    }
+
+    // ---------- Запись статуса в БД ----------
+    async function updateProjectsInDb() {
+        if (lastGeneratedProjects.length === 0) {
+            showMessage('Нет проектов для записи (сначала сгенерируйте файлы)', 'error');
+            return;
+        }
+        try {
+            const response = await fetch('/api/projects/update-status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ projects: lastGeneratedProjects })
+            });
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || 'Ошибка обновления');
+            }
+            const data = await response.json();
+            showMessage(`✅ Обновлено ${data.updated} проектов, создано ${data.created} новых`, 'success');
+            lastGeneratedProjects = [];
+        } catch (error) {
+            showMessage(`Ошибка: ${error.message}`, 'error');
+        }
+    }
+
+    // ---------- Просмотр проектов из БД ----------
+    async function showProjectsFromDb() {
+        const modal = document.getElementById('projectsModal');
+        const container = document.getElementById('projectsListContainer');
+        container.innerHTML = 'Загрузка...';
+        modal.classList.add('active');
+
+        try {
+            const response = await fetch('/api/projects');
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || 'Ошибка загрузки');
+            }
+            const data = await response.json();
+            const projects = data.items || [];
+
+            if (projects.length === 0) {
+                container.innerHTML = '<p>Проекты не найдены</p>';
+                return;
+            }
+
+            let html = `
+                <table class="projects-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Название проекта</th>
+                            <th>Архивный</th>
+                            <th>Расшивки выгружены</th>
+                            <th>Имя файла</th>
+                            <th>Действие</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            for (const p of projects) {
+                const statusClass = p.expanded_downloaded ? 'status-downloaded' : 'status-not-downloaded';
+                const statusText = p.expanded_downloaded ? '✅ Выгружены' : '❌ Не выгружены';
+                const archiveText = p.is_archive ? 'Да' : 'Нет';
+                const fileLink = p.file_name ? `<button class="download-btn" data-filename="${p.file_name}">📥 Скачать</button>` : '—';
+                html += `
+                    <tr>
+                        <td>${p.id}</td>
+                        <td>${escapeHtml(p.name)}</td>
+                        <td>${archiveText}</td>
+                        <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                        <td>${p.file_name ? escapeHtml(p.file_name) : '—'}</td>
+                        <td>${fileLink}</td>
+                    </tr>
+                `;
+            }
+            html += `</tbody></table>`;
+            container.innerHTML = html;
+
+            container.querySelectorAll('.download-btn').forEach(btn => {
+                btn.addEventListener('click', async function() {
+                    const fileName = this.dataset.filename;
+                    try {
+                        const response = await fetch(`/api/projects/download/${encodeURIComponent(fileName)}`);
+                        if (!response.ok) {
+                            const err = await response.json();
+                            throw new Error(err.error || 'Ошибка скачивания');
+                        }
+                        const blob = await response.blob();
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = fileName;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    } catch (error) {
+                        showMessage(`Ошибка скачивания: ${error.message}`, 'error');
+                    }
+                });
+            });
+        } catch (error) {
+            container.innerHTML = `<p style="color:#b91c1c;">Ошибка: ${error.message}</p>`;
+        }
+    }
+
+    // ---------- Отправка на сервер (генерация Excel) ----------
     async function submitExcel(endpoint) {
         const data = collectData();
         if (!data.address) {
@@ -1369,7 +1598,28 @@
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            showMessage(`✅ Файл для ${targetType} успешно сгенерирован!`, 'success');
+
+            // Извлекаем путь к файлу из заголовка
+            const filePathHeader = response.headers.get('X-File-Path');
+            let filePath = null;
+            if (filePathHeader) {
+                try {
+                    filePath = decodeURIComponent(filePathHeader);
+                } catch(e) {
+                    filePath = filePathHeader;
+                }
+            }
+
+            // Запоминаем проект для записи в БД
+            const projectEntry = {
+                name: data.address,
+                fileName: filename,
+                filePath: filePath
+            };
+            if (!lastGeneratedProjects.some(p => p.name === projectEntry.name)) {
+                lastGeneratedProjects.push(projectEntry);
+            }
+            showMessage(`✅ Файл для ${targetType} успешно сгенерирован! Нажмите "Записать в БД" для сохранения статуса.`, 'success');
         } catch (err) {
             showMessage(`Ошибка: ${err.message}`, 'error');
         }
@@ -1405,6 +1655,9 @@
     document.getElementById('applyGlobalRoomBtn').addEventListener('click', applyGlobalRoom);
     document.getElementById('deleteAllBoardsBtn').addEventListener('click', deleteAllBoards);
     document.getElementById('toggleAllBoardsBtn').addEventListener('click', toggleAllBoards);
+    document.getElementById('syncProjectsBtn').addEventListener('click', syncProjects);
+    document.getElementById('updateDbBtn').addEventListener('click', updateProjectsInDb);
+    document.getElementById('showProjectsBtn').addEventListener('click', showProjectsFromDb);
 
     document.getElementById('submitExcelBtn').addEventListener('click', () => submitExcel('/generate-sv005'));
     document.getElementById('submitExcelTopBtn').addEventListener('click', () => submitExcel('/generate-sv005'));
@@ -1421,6 +1674,16 @@
         msgDiv.innerHTML = `<div class="${type}">${msg}</div>`;
         setTimeout(() => { msgDiv.innerHTML = ''; }, 4000);
     }
+
+    // ---------- Закрытие модального окна ----------
+    document.getElementById('closeProjectsModal').addEventListener('click', function() {
+        document.getElementById('projectsModal').classList.remove('active');
+    });
+    document.getElementById('projectsModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            this.classList.remove('active');
+        }
+    });
 
     // ---------- Поиск проектов через API ----------
     async function searchProjects(query, showArchived) {
@@ -1483,7 +1746,6 @@
         }
     }
 
-    // Обработчики для поиска
     const addressInput = document.getElementById('address');
     const showArchivedCheckbox = document.getElementById('showArchived');
     const suggestionsContainer = document.getElementById('projectSuggestions');
@@ -1505,7 +1767,6 @@
         }
     });
 
-    // Закрытие списка при клике вне
     document.addEventListener('click', function(e) {
         const wrapper = document.querySelector('.address-wrapper');
         if (!wrapper.contains(e.target)) {
