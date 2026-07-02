@@ -27,12 +27,99 @@
             padding-bottom: 8px;
             border-bottom: 2px solid #bdd4e7;
         }
+
+        /* Строка адреса — теперь чекбокс справа */
+        .address-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            width: 100%;
+            margin-bottom: 8px; /* уменьшен отступ снизу */
+            background: #f8fafc;
+            padding: 8px 16px;
+            border-radius: 18px;
+        }
+        .address-row .address-wrapper {
+            flex: 1;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            gap: 2px; /* чуть меньше */
+        }
+        .address-row .address-wrapper label {
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        .address-row #address {
+            width: 100%;
+            padding: 5px 10px;
+            border-radius: 14px;
+            border: 1px solid #cbd5e1;
+            font-size: 0.85rem;
+            background: white;
+            height: 32px;
+            box-sizing: border-box;
+        }
+        .address-row .checkbox-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+            flex-shrink: 0;
+            margin-top: 4px; /* чтобы выровнять с полем ввода */
+        }
+        .address-row .checkbox-wrapper input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+        .address-row .checkbox-wrapper label {
+            font-size: 0.7rem;
+            font-weight: normal;
+            color: #2c3e50;
+            cursor: pointer;
+        }
+        #projectSuggestions {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            width: 100%;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+            display: none;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        #projectSuggestions .suggestion-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+            font-size: 0.85rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        #projectSuggestions .suggestion-item:hover {
+            background: #f0f6fe;
+        }
+        #projectSuggestions .no-results {
+            padding: 8px 12px;
+            color: #666;
+            font-size: 0.85rem;
+        }
+
         .toolbar {
             display: flex;
             flex-wrap: wrap;
             gap: 12px;
             align-items: flex-end;
-            margin: 12px 0 18px;
+            margin: 8px 0 18px; /* уменьшен верхний отступ */
             background: #f8fafc;
             padding: 12px 16px;
             border-radius: 18px;
@@ -70,58 +157,6 @@
         }
         .field input[type="number"] {
             width: 70px;
-        }
-        .address-wrapper {
-            position: relative;
-        }
-        #projectSuggestions {
-            position: absolute;
-            top: 100%;
-            left: 0;
-            width: 600px;
-            max-width: 90vw;
-            background: white;
-            border: 1px solid #ccc;
-            border-radius: 8px;
-            max-height: 300px;
-            overflow-y: auto;
-            display: none;
-            z-index: 1000;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-        #projectSuggestions .suggestion-item {
-            padding: 8px 12px;
-            cursor: pointer;
-            border-bottom: 1px solid #eee;
-            font-size: 0.85rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        #projectSuggestions .suggestion-item:hover {
-            background: #f0f6fe;
-        }
-        #projectSuggestions .no-results {
-            padding: 8px 12px;
-            color: #666;
-            font-size: 0.85rem;
-        }
-        .checkbox-wrapper {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            margin-top: 4px;
-        }
-        .checkbox-wrapper input[type="checkbox"] {
-            width: 16px;
-            height: 16px;
-            cursor: pointer;
-        }
-        .checkbox-wrapper label {
-            font-size: 0.7rem;
-            font-weight: normal;
-            color: #2c3e50;
-            cursor: pointer;
         }
         button {
             background: #1e3c72;
@@ -469,7 +504,7 @@
             .cable-field label { font-size: 0.55rem; }
         }
 
-        /* Стили для модального окна (расширенное) */
+        /* Модальное окно */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -521,7 +556,7 @@
             padding: 0 4px;
         }
 
-        /* Закреплённая панель фильтров */
+        /* Фильтры в модалке */
         .filter-panel {
             position: sticky;
             top: 0;
@@ -581,8 +616,6 @@
         .projects-table tbody tr:active {
             background: #bfdbfe !important;
         }
-
-        /* Колонки со ссылками — одинаковая ширина, одна строка */
         .projects-table .link-cell {
             max-width: 200px;
             min-width: 120px;
@@ -600,7 +633,6 @@
             vertical-align: middle;
             pointer-events: auto;
         }
-
         .status-badge {
             padding: 2px 10px;
             border-radius: 20px;
@@ -616,27 +648,17 @@
             background: #fee2e2;
             color: #b91c1c;
         }
-        .download-btn {
-            background: #2b6e3c;
-            border: none;
-            color: white;
-            padding: 2px 12px;
-            border-radius: 30px;
-            cursor: pointer;
-            font-size: 0.7rem;
-            height: 28px;
-            white-space: nowrap;
-        }
-        .download-btn:hover {
-            background: #1e4f2c;
-        }
-        .cf-link {
-            color: #1e4663;
+        .file-download-link {
+            display: inline-block;
+            margin-right: 8px;
             text-decoration: underline;
-            word-break: break-all;
+            color: #1e4663;
+            cursor: pointer;
+            font-size: 0.85rem;
         }
-        .cf-link:hover {
+        .file-download-link:hover {
             color: #0f2b4f;
+            text-decoration: none;
         }
         .select-project-btn {
             background: #1e4663;
@@ -648,25 +670,52 @@
             font-size: 0.7rem;
             height: 26px;
             white-space: nowrap;
+            flex-shrink: 0;
         }
         .select-project-btn:hover {
             background: #0f2b4f;
+        }
+        .cf-link {
+            color: #1e4663;
+            text-decoration: underline;
+            word-break: break-all;
+        }
+        .cf-link:hover {
+            color: #0f2b4f;
+        }
+        .file-cell {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: space-between;
+        }
+        .file-links-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            flex: 1;
         }
     </style>
 </head>
 <body>
 <div class="container">
     <h1>🔌 Редактор плат SV005 / SV004 (ручное назначение)</h1>
-    <div class="toolbar">
-        <div class="field address-wrapper">
+
+    <!-- Строка адреса с чекбоксом справа -->
+    <div class="address-row">
+        <div class="address-wrapper">
             <label>📍 Адрес</label>
             <input type="text" id="address" placeholder="Введите адрес или название проекта" value="">
             <div id="projectSuggestions"></div>
-            <div class="checkbox-wrapper">
-                <input type="checkbox" id="showArchived">
-                <label for="showArchived">Показывать архивные проекты</label>
-            </div>
         </div>
+        <div class="checkbox-wrapper">
+            <input type="checkbox" id="showArchived">
+            <label for="showArchived">Показывать архивные проекты</label>
+        </div>
+    </div>
+
+    <!-- Основной тулбар -->
+    <div class="toolbar">
         <div class="field">
             <label>🎛 Модель</label>
             <select id="globalModelSelect">
@@ -742,7 +791,6 @@
             <button class="modal-close" id="closeProjectsModal">✕ Закрыть</button>
         </div>
         <div class="modal-body" id="projectsModalBody">
-            <!-- Закреплённая панель фильтров -->
             <div class="filter-panel">
                 <input type="text" id="projectsSearch" placeholder="🔍 Поиск по названию..." />
                 <select id="projectsArchiveFilter">
@@ -1651,7 +1699,7 @@
                         <th style="width:120px;">Расшивки выгружены</th>
                         <th class="link-cell">Ссылка на Google Диск</th>
                         <th class="link-cell">Ссылка на NextCloud</th>
-                        <th style="min-width:140px;">Файлы</th>
+                        <th style="min-width:200px;">Файлы</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1665,17 +1713,17 @@
             const cfLink = group.cf_92 ? `<a href="${escapeHtml(group.cf_92)}" target="_blank" class="cf-link" title="${escapeHtml(group.cf_92)}">${escapeHtml(group.cf_92)}</a>` : '—';
             const ncLink = group.cf_217 ? `<a href="${escapeHtml(group.cf_217)}" target="_blank" class="cf-link" title="${escapeHtml(group.cf_217)}">${escapeHtml(group.cf_217)}</a>` : '—';
 
-            let fileButtons = '';
+            let fileLinks = '';
             group.files.forEach(f => {
                 if (f.file_name) {
-                    fileButtons += `<button class="download-btn" data-filename="${f.file_name}" style="margin-right:6px;">📥 ${f.file_name}</button>`;
+                    fileLinks += `<a href="#" class="file-download-link" data-filename="${f.file_name}">${f.file_name}</a>`;
                 }
             });
-            if (!fileButtons) fileButtons = '—';
+            if (!fileLinks) fileLinks = '—';
 
-            // ИСПРАВЛЕНИЕ: используем encodeURIComponent для data-атрибута, чтобы гарантировать корректную передачу любых символов
             const encodedName = encodeURIComponent(name);
             const escapedName = escapeHtml(name);
+
             html += `
                 <tr data-project-name="${encodedName}" style="cursor:pointer;">
                     <td><strong>${escapedName}</strong></td>
@@ -1684,8 +1732,10 @@
                     <td class="link-cell">${cfLink}</td>
                     <td class="link-cell">${ncLink}</td>
                     <td>
-                        ${fileButtons}
-                        <button class="select-project-btn" data-project-name="${encodedName}" style="margin-left:6px;">📌 Выбрать</button>
+                        <div class="file-cell">
+                            <div class="file-links-container">${fileLinks}</div>
+                            <button class="select-project-btn" data-project-name="${encodedName}">📌 Выбрать</button>
+                        </div>
                     </td>
                 </tr>
             `;
@@ -1694,9 +1744,9 @@
         html += `</tbody></table>`;
         container.innerHTML = html;
 
-        // Обработчики для кнопок скачивания
-        container.querySelectorAll('.download-btn').forEach(btn => {
-            btn.addEventListener('click', async function(e) {
+        container.querySelectorAll('.file-download-link').forEach(link => {
+            link.addEventListener('click', async function(e) {
+                e.preventDefault();
                 e.stopPropagation();
                 const fileName = this.dataset.filename;
                 try {
@@ -1720,7 +1770,6 @@
             });
         });
 
-        // Обработчики для кнопок "Выбрать"
         container.querySelectorAll('.select-project-btn').forEach(btn => {
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
@@ -1732,7 +1781,6 @@
             });
         });
 
-        // Обработчики для строк таблицы
         container.querySelectorAll('.projects-table tbody tr').forEach(tr => {
             tr.addEventListener('click', function() {
                 const encodedName = this.dataset.projectName;
@@ -2045,7 +2093,7 @@
         });
 
         document.addEventListener('click', function(e) {
-            const wrapper = document.querySelector('.address-wrapper');
+            const wrapper = document.querySelector('.address-row .address-wrapper');
             if (wrapper && !wrapper.contains(e.target)) {
                 suggestionsContainer.style.display = 'none';
             }
