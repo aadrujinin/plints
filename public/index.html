@@ -60,6 +60,54 @@
         .field input[type="number"] {
             width: 70px;
         }
+        .address-wrapper {
+            position: relative;
+        }
+        #projectSuggestions {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        #projectSuggestions .suggestion-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+            font-size: 0.85rem;
+        }
+        #projectSuggestions .suggestion-item:hover {
+            background: #f0f6fe;
+        }
+        #projectSuggestions .no-results {
+            padding: 8px 12px;
+            color: #666;
+            font-size: 0.85rem;
+        }
+        .checkbox-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 4px;
+        }
+        .checkbox-wrapper input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+        .checkbox-wrapper label {
+            font-size: 0.7rem;
+            font-weight: normal;
+            color: #2c3e50;
+            cursor: pointer;
+        }
         button {
             background: #1e3c72;
             border: none;
@@ -432,9 +480,14 @@
 <div class="container">
     <h1>🔌 Редактор плат SV005 / SV004 (ручное назначение)</h1>
     <div class="toolbar">
-        <div class="field">
+        <div class="field address-wrapper">
             <label>📍 Адрес</label>
-            <input type="text" id="address" placeholder="" value="">
+            <input type="text" id="address" placeholder="Введите адрес или название проекта" value="">
+            <div id="projectSuggestions"></div>
+            <div class="checkbox-wrapper">
+                <input type="checkbox" id="showArchived">
+                <label for="showArchived">Показывать архивные проекты</label>
+            </div>
         </div>
         <div class="field">
             <label>🎛 Модель</label>
@@ -1289,6 +1342,97 @@
         msgDiv.innerHTML = `<div class="${type}">${msg}</div>`;
         setTimeout(() => { msgDiv.innerHTML = ''; }, 4000);
     }
+
+    // ---------- Поиск проектов через API (новая функциональность) ----------
+async function searchProjects(query, showArchived) {
+    const container = document.getElementById('projectSuggestions');
+    if (!query || query.length < 2) {
+        container.style.display = 'none';
+        return;
+    }
+
+    try {
+        const params = new URLSearchParams({
+            search: query,
+            showArchived: showArchived ? 'true' : 'false'
+        });
+        const response = await fetch(`/api/projects/search?${params.toString()}`);
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || 'Ошибка поиска');
+        }
+        const data = await response.json();
+        const projects = data.items || [];
+        const totalBefore = data.total_before_filter || 0;
+        const archivedCount = data.archived_count || 0;
+
+        console.log(`🔍 Поиск: "${query}"`);
+        console.log(`   Всего найдено по названию: ${totalBefore}`);
+        console.log(`   Архивных отсеяно: ${archivedCount}`);
+        console.log(`   Показано: ${projects.length}`);
+
+        container.innerHTML = '';
+        if (projects.length === 0) {
+            let message = 'Проекты не найдены';
+            if (totalBefore > 0 && archivedCount > 0 && !showArchived) {
+                message = `Найдено ${totalBefore} проектов, но все они архивные. Включите "Показывать архивные проекты", чтобы увидеть их.`;
+            } else if (totalBefore === 0) {
+                message = 'Проекты не найдены по вашему запросу.';
+            }
+            container.innerHTML = `<div class="no-results">${message}</div>`;
+            container.style.display = 'block';
+            return;
+        }
+
+        projects.forEach(project => {
+            const item = document.createElement('div');
+            item.className = 'suggestion-item';
+            const name = project.name || project.title || 'Без названия';
+            item.textContent = name;
+            item.addEventListener('click', () => {
+                document.getElementById('address').value = name;
+                container.style.display = 'none';
+            });
+            container.appendChild(item);
+        });
+
+        container.style.display = 'block';
+    } catch (error) {
+        console.error('Ошибка поиска проектов:', error);
+        container.innerHTML = `<div class="no-results" style="color:#b91c1c;">Ошибка: ${error.message}</div>`;
+        container.style.display = 'block';
+    }
+}
+
+    // Обработчики для поиска
+    const addressInput = document.getElementById('address');
+    const showArchivedCheckbox = document.getElementById('showArchived');
+    const suggestionsContainer = document.getElementById('projectSuggestions');
+
+    let searchTimeout = null;
+    addressInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        const query = this.value.trim();
+        const showArchived = showArchivedCheckbox.checked;
+        searchTimeout = setTimeout(() => {
+            searchProjects(query, showArchived);
+        }, 300);
+    });
+
+    showArchivedCheckbox.addEventListener('change', function() {
+        const query = addressInput.value.trim();
+        if (query.length >= 2) {
+            searchProjects(query, this.checked);
+        }
+    });
+
+    // Закрытие списка при клике вне
+    document.addEventListener('click', function(e) {
+        const wrapper = document.querySelector('.address-wrapper');
+        if (!wrapper.contains(e.target)) {
+            suggestionsContainer.style.display = 'none';
+        }
+    });
 
     // Стартовая плата (SV005)
     const container = document.getElementById('boardsContainer');

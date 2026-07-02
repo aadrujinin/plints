@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const ExcelJS = require('exceljs');
 const path = require('path');
@@ -812,6 +813,91 @@ app.post('/generate-sv004', async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'Ошибка генерации SV004: ' + err.message });
+    }
+});
+
+// ---------- МАРШРУТ: поиск проектов через API AsPro (загружает все страницы) ----------
+app.get('/api/projects/search', async (req, res) => {
+    const { search, showArchived } = req.query;
+    const apiKey = process.env.API_KEY;
+    const baseUrl = process.env.API_BASE_URL;
+
+    if (!apiKey || !baseUrl) {
+        return res.status(500).json({ error: 'Не заданы API_KEY или API_BASE_URL в .env' });
+    }
+
+    if (!search || search.length < 2) {
+        return res.json({ items: [] });
+    }
+
+    try {
+        // Загружаем все страницы, пока не получим все проекты
+        let allProjects = [];
+        let page = 1;
+        const perPage = 50; // API ограничивает максимум 50, даже если запросить больше
+        let total = 0;
+
+        while (true) {
+            const url = `${baseUrl}?api_key=${apiKey}&page=${page}&per_page=${perPage}`;
+            console.log(`Запрос к AsPro API: ${url}`);
+
+            const response = await fetch(url);
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`API вернул ${response.status}: ${errorText}`);
+            }
+
+            const data = await response.json();
+            const items = data.response?.items || [];
+            total = data.response?.total || 0;
+            allProjects = allProjects.concat(items);
+
+            console.log(`Страница ${page}: получено ${items.length}, всего загружено ${allProjects.length} из ${total}`);
+
+            // Если загрузили все проекты или на странице меньше, чем perPage, значит это последняя
+            if (allProjects.length >= total) break;
+            if (items.length < perPage) break;
+
+            page++;
+            // Защита от бесконечного цикла (максимум 30 страниц)
+            if (page > 30) break;
+        }
+
+        console.log(`Всего загружено проектов: ${allProjects.length} из ${total}`);
+
+        // Фильтруем по поисковому запросу (в названии проекта)
+        const lowerSearch = search.toLowerCase();
+        let filteredBySearch = allProjects.filter(p => p.name && p.name.toLowerCase().includes(lowerSearch));
+        const totalBeforeArchive = filteredBySearch.length;
+
+        console.log(`Найдено по названию: ${totalBeforeArchive}`);
+
+        // Фильтруем по архиву, если не показываем архивные
+        let filteredByArchive = filteredBySearch;
+        let archivedCount = 0;
+        if (showArchived !== 'true') {
+            filteredByArchive = filteredBySearch.filter(p => !p.is_archive);
+            archivedCount = totalBeforeArchive - filteredByArchive.length;
+            console.log(`Отфильтровано архивных: ${archivedCount}, осталось: ${filteredByArchive.length}`);
+        } else {
+            console.log(`Показываем все проекты (включая архивные): ${filteredByArchive.length}`);
+        }
+
+        // Ограничиваем количество выдаваемых результатов (например, 100)
+        const limit = 100;
+        if (filteredByArchive.length > limit) {
+            filteredByArchive = filteredByArchive.slice(0, limit);
+        }
+
+        res.json({
+            items: filteredByArchive,
+            total_before_filter: totalBeforeArchive,
+            total_after_filter: filteredByArchive.length,
+            archived_count: archivedCount
+        });
+    } catch (error) {
+        console.error('Ошибка при поиске проектов:', error);
+        res.status(500).json({ error: error.message });
     }
 });
 
