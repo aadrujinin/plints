@@ -23,7 +23,7 @@ const pool = new Pool({
     database: process.env.DB_NAME,
 });
 
-// Создание/обновление таблицы проектов (добавлено поле cf_92)
+// Создание/обновление таблицы проектов (добавлены поля cf_92 и cf_217)
 async function initDatabase() {
     const createQuery = `
         CREATE TABLE IF NOT EXISTS projects (
@@ -34,6 +34,7 @@ async function initDatabase() {
             file_name TEXT,
             file_path TEXT,
             cf_92 TEXT,
+            cf_217 TEXT,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     `;
@@ -54,6 +55,13 @@ async function initDatabase() {
         console.log('✅ Поле cf_92 добавлено (если отсутствовало)');
     } catch (err) {
         console.warn('⚠️ Не удалось добавить cf_92:', err.message);
+    }
+
+    try {
+        await pool.query('ALTER TABLE projects ADD COLUMN IF NOT EXISTS cf_217 TEXT;');
+        console.log('✅ Поле cf_217 добавлено (если отсутствовало)');
+    } catch (err) {
+        console.warn('⚠️ Не удалось добавить cf_217:', err.message);
     }
 }
 initDatabase();
@@ -514,11 +522,9 @@ function fillSheetsSV004(workbook, boards, globalModel) {
                 const device = tm[pin] || '';
                 const cable = cm[pin] || '';
                 let room = (rm[pin] && rm[pin].trim()) ? rm[pin] : '';
-                // Если устройство не выбрано, ставим "Резерв"
                 if (!device) {
                     room = 'Резерв';
                 }
-                // Всегда добавляем строку, даже если device пустой
                 cheatSheet.getCell(`A${rowIdx}`).value = '';
                 cheatSheet.getCell(`B${rowIdx}`).value = plinthNumber;
                 cheatSheet.getCell(`C${rowIdx}`).value = `Пин${pin}`;
@@ -528,10 +534,9 @@ function fillSheetsSV004(workbook, boards, globalModel) {
                 cheatSheet.getCell(`G${rowIdx}`).value = counter++;
                 rowIdx++;
             }
-            rowIdx++; // пустая строка между плинтами
+            rowIdx++;
         }
 
-        // Собираем данные из шпоргалки для Disp
         const cheatData = [];
         for (let r = 4; r < rowIdx; r++) {
             const b = cheatSheet.getCell(`B${r}`).value;
@@ -615,17 +620,15 @@ function createSheetsSV005(workbook, boards, globalModel) {
         const boardNumber = i + 1;
         const commonRoom = board.plinth1.room || '';
 
-        const num1 = i * 2 + 1; // 1,3,5,...
-        const num2 = i * 2 + 2; // 2,4,6,...
+        const num1 = i * 2 + 1;
+        const num2 = i * 2 + 2;
 
-        // ----- Входной плинт (R1/D1) -----
         const tm1 = board.plinth1.terminalMap || {};
         const cn1 = board.plinth1.cableNumbers || {};
         const hasReader1 = Object.values(tm1).includes('reader');
         const hasLock1 = Object.values(tm1).includes('lock');
         const hasFireLock1 = Object.values(tm1).includes('fire_lock');
 
-        // R1 строка – всегда
         const rowR1 = rowIdx;
         cheatSheet.getCell(`A${rowR1}`).value = '';
         cheatSheet.getCell(`B${rowR1}`).value = boardNumber;
@@ -639,17 +642,14 @@ function createSheetsSV005(workbook, boards, globalModel) {
             cheatSheet.getCell(`F${rowR1}`).value = '';
             cheatSheet.getCell(`G${rowR1}`).value = '';
         }
-        // E – помещение или Резерв
         if (commonRoom) {
             cheatSheet.getCell(`E${rowR1}`).value = `пом. ${commonRoom}`;
         } else {
-            // Проверяем, есть ли устройства на этом плинте
             const hasAnyDevice1 = Object.values(tm1).some(v => v && v !== '');
             cheatSheet.getCell(`E${rowR1}`).value = hasAnyDevice1 ? '' : 'Резерв';
         }
         rowIdx++;
 
-        // D1 строка – всегда
         const rowD1 = rowIdx;
         cheatSheet.getCell(`A${rowD1}`).value = '';
         cheatSheet.getCell(`B${rowD1}`).value = '';
@@ -661,7 +661,6 @@ function createSheetsSV005(workbook, boards, globalModel) {
         } else {
             cheatSheet.getCell(`D${rowD1}`).value = '';
         }
-        // E – помещение или Резерв
         if (commonRoom) {
             cheatSheet.getCell(`E${rowD1}`).value = `пом. ${commonRoom}`;
         } else {
@@ -676,7 +675,6 @@ function createSheetsSV005(workbook, boards, globalModel) {
             cheatSheet.getCell(`G${rowR1}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0000' } };
         }
 
-        // ----- Выходной плинт (R2/D2) -----
         const tm2 = board.plinth2.terminalMap || {};
         const cn2 = board.plinth2.cableNumbers || {};
         const hasReader2 = Object.values(tm2).includes('reader');
@@ -731,7 +729,7 @@ function createSheetsSV005(workbook, boards, globalModel) {
             cheatSheet.getCell(`G${rowD2}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0000' } };
         }
 
-        rowIdx++; // пустая строка между платами
+        rowIdx++;
     }
 
     const commonSheet = workbook.addWorksheet('Шпора общая', { properties: { tabColor: { argb: 'FFE0E0FF' } } });
@@ -1087,7 +1085,7 @@ app.post('/generate-sv004', async (req, res) => {
     }
 });
 
-// ---------- Синхронизация проектов ----------
+// ---------- Синхронизация проектов (добавлен cf_217) ----------
 app.post('/api/projects/sync', async (req, res) => {
     const apiKey = process.env.API_KEY;
     const baseUrl = process.env.API_BASE_URL;
@@ -1127,27 +1125,29 @@ app.post('/api/projects/sync', async (req, res) => {
                 const { id, name, is_archive } = project;
                 const isArchiveBool = (is_archive === 1 || is_archive === true);
                 let cf_92 = null;
+                let cf_217 = null;
                 try {
                     const detailUrl = `https://inteko.aspro.cloud/api/v1/module/st/projects/get/${id}?api_key=${apiKey}`;
                     const detailResponse = await fetch(detailUrl);
                     if (detailResponse.ok) {
                         const detailData = await detailResponse.json();
                         cf_92 = detailData.response?.cf_92 || null;
+                        cf_217 = detailData.response?.cf_217 || null;
                     }
                 } catch (err) {
-                    console.warn(`Не удалось получить cf_92 для проекта ${id}:`, err.message);
+                    console.warn(`Не удалось получить cf_92/cf_217 для проекта ${id}:`, err.message);
                 }
 
                 const check = await client.query('SELECT id FROM projects WHERE id = $1', [id]);
                 if (check.rows.length === 0) {
                     await client.query(
-                        'INSERT INTO projects (id, name, is_archive, expanded_downloaded, cf_92) VALUES ($1, $2, $3, $4, $5)',
-                        [id, name, isArchiveBool, false, cf_92]
+                        'INSERT INTO projects (id, name, is_archive, expanded_downloaded, cf_92, cf_217) VALUES ($1, $2, $3, $4, $5, $6)',
+                        [id, name, isArchiveBool, false, cf_92, cf_217]
                     );
                 } else {
                     await client.query(
-                        'UPDATE projects SET name = $1, is_archive = $2, cf_92 = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4',
-                        [name, isArchiveBool, cf_92, id]
+                        'UPDATE projects SET name = $1, is_archive = $2, cf_92 = $3, cf_217 = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5',
+                        [name, isArchiveBool, cf_92, cf_217, id]
                     );
                 }
             }
@@ -1222,11 +1222,11 @@ app.post('/api/projects/update-status', async (req, res) => {
     }
 });
 
-// ---------- Получение проектов ----------
+// ---------- Получение проектов (добавлен cf_217) ----------
 app.get('/api/projects', async (req, res) => {
     const { onlyNotDownloaded } = req.query;
     try {
-        let query = 'SELECT id, name, is_archive, expanded_downloaded, file_name, file_path, cf_92, updated_at FROM projects';
+        let query = 'SELECT id, name, is_archive, expanded_downloaded, file_name, file_path, cf_92, cf_217, updated_at FROM projects';
         const params = [];
         if (onlyNotDownloaded === 'true') {
             query += ' WHERE expanded_downloaded = false';
