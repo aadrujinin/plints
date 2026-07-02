@@ -468,6 +468,7 @@
             .cable-field input { font-size: 0.55rem; height: 18px; }
             .cable-field label { font-size: 0.55rem; }
         }
+
         /* Стили для модального окна (расширенное) */
         .modal-overlay {
             display: none;
@@ -517,11 +518,20 @@
         .modal-body {
             overflow-y: auto;
             max-height: calc(95vh - 120px);
+            padding: 0 4px;
         }
+
+        /* Закреплённая панель фильтров */
         .filter-panel {
+            position: sticky;
+            top: 0;
+            background: white;
+            z-index: 10;
+            padding: 8px 0 12px 0;
+            border-bottom: 2px solid #bdd4e7;
+            margin-bottom: 12px;
             display: flex;
             gap: 12px;
-            margin-bottom: 12px;
             align-items: center;
             flex-wrap: wrap;
         }
@@ -540,6 +550,7 @@
         .filter-panel select {
             min-width: 140px;
         }
+
         .projects-table {
             width: 100%;
             border-collapse: collapse;
@@ -551,20 +562,42 @@
             padding: 8px 12px;
             text-align: left;
             position: sticky;
-            top: 0;
+            top: 52px;
+            z-index: 5;
         }
         .projects-table td {
             padding: 6px 12px;
             border-bottom: 1px solid #e2edf7;
+            vertical-align: middle;
         }
         .projects-table tr:hover {
             background: #f0f6fe;
         }
+
+        /* Колонки со ссылками — одинаковая ширина, одна строка */
+        .projects-table .link-cell {
+            max-width: 200px;
+            min-width: 120px;
+            width: 15%;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .projects-table .link-cell a {
+            display: inline-block;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+
         .status-badge {
             padding: 2px 10px;
             border-radius: 20px;
             font-size: 0.7rem;
             font-weight: bold;
+            white-space: nowrap;
         }
         .status-downloaded {
             background: #dcfce7;
@@ -583,6 +616,7 @@
             cursor: pointer;
             font-size: 0.7rem;
             height: 28px;
+            white-space: nowrap;
         }
         .download-btn:hover {
             background: #1e4f2c;
@@ -654,7 +688,7 @@
 
     <div id="boardsContainer"></div>
 
-    <!-- Нижняя панель управления (тип платы, кнопка "Плата" и кнопки Excel, выровнены по центру) -->
+    <!-- Нижняя панель управления -->
     <div class="toolbar-bottom">
         <div class="field">
             <label>Тип платы</label>
@@ -685,7 +719,7 @@
             <button class="modal-close" id="closeProjectsModal">✕ Закрыть</button>
         </div>
         <div class="modal-body" id="projectsModalBody">
-            <!-- Панель фильтров -->
+            <!-- Закреплённая панель фильтров -->
             <div class="filter-panel">
                 <input type="text" id="projectsSearch" placeholder="🔍 Поиск по названию..." />
                 <select id="projectsArchiveFilter">
@@ -743,7 +777,7 @@
     };
 
     let lastGeneratedProjects = [];
-    let allProjectsData = []; // для хранения данных в модалке
+    let allProjectsData = [];
 
     function escapeHtml(str) {
         if (!str) return '';
@@ -908,7 +942,7 @@
         return plinthDiv;
     }
 
-    // ---------- Функция пересчёта номеров плинтов (использует глобальную стойку) ----------
+    // ---------- Пересчёт номеров плинтов ----------
     function renumberBoards() {
         const boardDivs = document.querySelectorAll('.board-card');
         const globalRack = document.getElementById('globalRack').value.trim() || 'ХК';
@@ -961,12 +995,11 @@
         document.getElementById('totalCount').textContent = boards.length;
     }
 
-    // ---------- Создание платы (без отдельного поля стойки) ----------
+    // ---------- Создание платы ----------
     function createBoard(boardIndex, initialData = null, collapsed = true, boardType = 'SV005') {
         const boardNumber = boardIndex + 1;
         const defaultRack = document.getElementById('globalRack').value.trim() || 'ХК';
 
-        // Всегда 2 плинта
         const defaultHolder1 = buildHolder(defaultRack, 0);
         const defaultHolder2 = buildHolder(defaultRack, 0);
 
@@ -1055,7 +1088,7 @@
         if (boardType === 'SV005') {
             plinth1Div = createPlinthElementSV005('R1/D1', defaultData.plinth1, defaultData.skud1);
             plinth2Div = createPlinthElementSV005('R2/D2', defaultData.plinth2, defaultData.skud2);
-        } else { // SV004
+        } else {
             plinth1Div = createPlinthElementSV004('R1/D1', defaultData.plinth1, defaultData.skud1);
             plinth2Div = createPlinthElementSV004('R2/D2', defaultData.plinth2, defaultData.skud2);
         }
@@ -1095,7 +1128,7 @@
         return boardDiv;
     }
 
-    // ---------- Сбор данных (rack берётся из глобального поля) ----------
+    // ---------- Сбор данных ----------
     function collectData() {
         const address = document.getElementById('address').value.trim();
         const globalModel = document.getElementById('globalModelSelect').value;
@@ -1188,7 +1221,7 @@
                         cableNumbers2.contact = plinth2Div.querySelector('.cable-contact')?.value?.trim() || '';
                         cableNumbers2.exit_btn = plinth2Div.querySelector('.cable-exit_btn')?.value?.trim() || '';
                         cableNumbers2.fire_lock = plinth2Div.querySelector('.cable-fire_lock')?.value?.trim() || '';
-                    } else { // SV004
+                    } else {
                         plinth2Skud = plinth2Div.querySelector('.skud')?.value?.trim() || '';
                         plinth2Number = plinth2Div.querySelector('.plinth-number')?.value?.trim() || '0';
                         const plinth2Terminals = plinth2Div.querySelectorAll('.terminal');
@@ -1413,19 +1446,62 @@
         showMessage(allCollapsed ? 'Все платы развернуты' : 'Все платы свернуты', 'success');
     }
 
-    // ---------- Синхронизация проектов с БД ----------
+    // ---------- Синхронизация с SSE (прогресс) ----------
     async function syncProjects() {
+        const msgDiv = document.getElementById('message');
+        msgDiv.innerHTML = `<div class="info">🔄 Начинаем синхронизацию...</div>`;
+
         try {
-            showMessage('🔄 Синхронизация проектов...', 'info');
-            const response = await fetch('/api/projects/sync', { method: 'POST' });
-            if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.error || 'Ошибка синхронизации');
-            }
-            const data = await response.json();
-            showMessage(`✅ Синхронизировано ${data.total} проектов`, 'success');
+            const eventSource = new EventSource('/api/projects/sync-stream');
+            let progressMsg = '';
+
+            eventSource.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                switch (data.type) {
+                    case 'status':
+                        progressMsg = data.message;
+                        msgDiv.innerHTML = `<div class="info">🔄 ${progressMsg}</div>`;
+                        break;
+                    case 'progress':
+                        if (data.loaded !== undefined && data.total) {
+                            const percent = Math.round((data.loaded / data.total) * 100);
+                            msgDiv.innerHTML = `<div class="info">🔄 Загружено ${data.loaded} из ${data.total} (${percent}%)</div>`;
+                        } else if (data.processed !== undefined && data.total) {
+                            const percent = Math.round((data.processed / data.total) * 100);
+                            msgDiv.innerHTML = `<div class="info">🔄 Обработано ${data.processed} из ${data.total} (${percent}%)</div>`;
+                        }
+                        break;
+                    case 'done':
+                        msgDiv.innerHTML = `<div class="success">✅ Синхронизация завершена! Загружено ${data.total} проектов.</div>`;
+                        eventSource.close();
+                        break;
+                    case 'error':
+                        msgDiv.innerHTML = `<div class="error">❌ Ошибка: ${data.message}</div>`;
+                        eventSource.close();
+                        break;
+                    default:
+                        break;
+                }
+            };
+
+            eventSource.onerror = function() {
+                if (eventSource.readyState === EventSource.CLOSED) {
+                    // уже закрыто
+                } else {
+                    msgDiv.innerHTML = `<div class="error">❌ Ошибка соединения с сервером</div>`;
+                    eventSource.close();
+                }
+            };
+
+            setTimeout(() => {
+                if (eventSource.readyState !== EventSource.CLOSED) {
+                    eventSource.close();
+                    msgDiv.innerHTML = `<div class="error">⏱ Превышено время ожидания</div>`;
+                }
+            }, 300000);
+
         } catch (error) {
-            showMessage(`Ошибка: ${error.message}`, 'error');
+            msgDiv.innerHTML = `<div class="error">❌ Ошибка: ${error.message}</div>`;
         }
     }
 
@@ -1453,7 +1529,7 @@
         }
     }
 
-    // ---------- Просмотр проектов из БД (с фильтрацией и NextCloud) ----------
+    // ---------- Просмотр проектов из БД ----------
     async function showProjectsFromDb() {
         const modal = document.getElementById('projectsModal');
         const container = document.getElementById('projectsListContainer');
@@ -1478,8 +1554,13 @@
 
             const searchInput = document.getElementById('projectsSearch');
             const filterSelect = document.getElementById('projectsArchiveFilter');
-            searchInput.addEventListener('input', applyFiltersAndRender);
-            filterSelect.addEventListener('change', applyFiltersAndRender);
+            // Удаляем старые обработчики, чтобы не накапливались
+            const newSearch = searchInput.cloneNode(true);
+            const newFilter = filterSelect.cloneNode(true);
+            searchInput.parentNode.replaceChild(newSearch, searchInput);
+            filterSelect.parentNode.replaceChild(newFilter, filterSelect);
+            newSearch.addEventListener('input', applyFiltersAndRender);
+            newFilter.addEventListener('change', applyFiltersAndRender);
 
         } catch (error) {
             container.innerHTML = `<p style="color:#b91c1c;">Ошибка: ${error.message}</p>`;
@@ -1488,8 +1569,8 @@
 
     function applyFiltersAndRender() {
         const container = document.getElementById('projectsListContainer');
-        const searchText = document.getElementById('projectsSearch').value.toLowerCase().trim();
-        const archiveFilter = document.getElementById('projectsArchiveFilter').value;
+        const searchText = document.getElementById('projectsSearch')?.value?.toLowerCase().trim() || '';
+        const archiveFilter = document.getElementById('projectsArchiveFilter')?.value || 'all';
 
         let filtered = allProjectsData;
 
@@ -1540,12 +1621,12 @@
             <table class="projects-table">
                 <thead>
                     <tr>
-                        <th>Название проекта</th>
-                        <th>Архивный</th>
-                        <th>Расшивки выгружены</th>
-                        <th>Ссылка на Google Диск</th>
-                        <th>Ссылка на NextCloud</th>
-                        <th>Файлы</th>
+                        <th style="min-width:150px;">Название проекта</th>
+                        <th style="width:80px;">Архивный</th>
+                        <th style="width:120px;">Расшивки выгружены</th>
+                        <th class="link-cell">Ссылка на Google Диск</th>
+                        <th class="link-cell">Ссылка на NextCloud</th>
+                        <th style="min-width:140px;">Файлы</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1556,8 +1637,8 @@
             const statusClass = group.expanded_downloaded ? 'status-downloaded' : 'status-not-downloaded';
             const statusText = group.expanded_downloaded ? '✅ Выгружены' : '❌ Не выгружены';
             const archiveText = group.is_archive ? 'Да' : 'Нет';
-            const cfLink = group.cf_92 ? `<a href="${escapeHtml(group.cf_92)}" target="_blank" class="cf-link">${escapeHtml(group.cf_92)}</a>` : '—';
-            const ncLink = group.cf_217 ? `<a href="${escapeHtml(group.cf_217)}" target="_blank" class="cf-link">${escapeHtml(group.cf_217)}</a>` : '—';
+            const cfLink = group.cf_92 ? `<a href="${escapeHtml(group.cf_92)}" target="_blank" class="cf-link" title="${escapeHtml(group.cf_92)}">${escapeHtml(group.cf_92)}</a>` : '—';
+            const ncLink = group.cf_217 ? `<a href="${escapeHtml(group.cf_217)}" target="_blank" class="cf-link" title="${escapeHtml(group.cf_217)}">${escapeHtml(group.cf_217)}</a>` : '—';
 
             let fileButtons = '';
             group.files.forEach(f => {
@@ -1572,8 +1653,8 @@
                     <td><strong>${escapeHtml(name)}</strong></td>
                     <td>${archiveText}</td>
                     <td><span class="status-badge ${statusClass}">${statusText}</span></td>
-                    <td>${cfLink}</td>
-                    <td>${ncLink}</td>
+                    <td class="link-cell">${cfLink}</td>
+                    <td class="link-cell">${ncLink}</td>
                     <td>${fileButtons}</td>
                 </tr>
             `;
@@ -1800,9 +1881,15 @@
         renumberBoards();
     });
 
-    // ---------- Поиск проектов через API ----------
+    // ---------- ПОИСК ПРОЕКТОВ В СТРОКЕ "АДРЕС" (исправлено) ----------
     async function searchProjects(query, showArchived) {
         const container = document.getElementById('projectSuggestions');
+        // Проверяем, что контейнер существует
+        if (!container) {
+            console.error('❌ Контейнер #projectSuggestions не найден!');
+            return;
+        }
+
         if (!query || query.length < 2) {
             container.style.display = 'none';
             return;
@@ -1861,39 +1948,48 @@
         }
     }
 
+    // Проверяем, что элементы существуют перед привязкой обработчиков
     const addressInput = document.getElementById('address');
     const showArchivedCheckbox = document.getElementById('showArchived');
     const suggestionsContainer = document.getElementById('projectSuggestions');
 
-    let searchTimeout = null;
-    addressInput.addEventListener('input', function() {
-        clearTimeout(searchTimeout);
-        const query = this.value.trim();
-        const showArchived = showArchivedCheckbox.checked;
-        searchTimeout = setTimeout(() => {
-            searchProjects(query, showArchived);
-        }, 300);
-    });
+    if (addressInput && showArchivedCheckbox && suggestionsContainer) {
+        let searchTimeout = null;
+        addressInput.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            const query = this.value.trim();
+            const showArchived = showArchivedCheckbox.checked;
+            searchTimeout = setTimeout(() => {
+                searchProjects(query, showArchived);
+            }, 300);
+        });
 
-    showArchivedCheckbox.addEventListener('change', function() {
-        const query = addressInput.value.trim();
-        if (query.length >= 2) {
-            searchProjects(query, this.checked);
-        }
-    });
+        showArchivedCheckbox.addEventListener('change', function() {
+            const query = addressInput.value.trim();
+            if (query.length >= 2) {
+                searchProjects(query, this.checked);
+            }
+        });
 
-    document.addEventListener('click', function(e) {
-        const wrapper = document.querySelector('.address-wrapper');
-        if (!wrapper.contains(e.target)) {
-            suggestionsContainer.style.display = 'none';
-        }
-    });
+        document.addEventListener('click', function(e) {
+            const wrapper = document.querySelector('.address-wrapper');
+            if (wrapper && !wrapper.contains(e.target)) {
+                suggestionsContainer.style.display = 'none';
+            }
+        });
+    } else {
+        console.error('❌ Не найдены элементы для поиска: address, showArchived или projectSuggestions');
+    }
 
-    // Стартовая плата (SV005)
+    // Стартовая плата
     const container = document.getElementById('boardsContainer');
-    const startBoard = createBoard(0, null, true, 'SV005');
-    container.appendChild(startBoard);
-    renumberBoards();
+    if (container) {
+        const startBoard = createBoard(0, null, true, 'SV005');
+        container.appendChild(startBoard);
+        renumberBoards();
+    } else {
+        console.error('❌ Контейнер #boardsContainer не найден!');
+    }
 </script>
 </body>
 </html>

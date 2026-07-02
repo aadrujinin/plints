@@ -23,7 +23,7 @@ const pool = new Pool({
     database: process.env.DB_NAME,
 });
 
-// Создание/обновление таблицы проектов (добавлены поля cf_92 и cf_217)
+// Создание/обновление таблицы проектов (cf_92, cf_217)
 async function initDatabase() {
     const createQuery = `
         CREATE TABLE IF NOT EXISTS projects (
@@ -134,7 +134,7 @@ function copyBlock(worksheet, sourceStart, sourceEnd, targetStart) {
     return targetStart + rowCount - 1;
 }
 
-// ---------- Автоподгон ширины столбцов (исключая лист с плинтами) ----------
+// ---------- Автоподгон ширины столбцов ----------
 function isPlinthSheet(sheetName) {
     const plinthSheetNames = ['Лист1', 'SV777-1 (SV004)'];
     return plinthSheetNames.includes(sheetName);
@@ -264,7 +264,7 @@ function getBlocksSV004(worksheet) {
     return blocks;
 }
 
-// ---------- Заполнение блока SV005 (с поддержкой "Резерв") ----------
+// ---------- Заполнение блока SV005 ----------
 async function fillPlinthBlockSV005(worksheet, startRow, blockType, plinthData, globalModel) {
     function findRowWithLabel(labelPart) {
         for (let r = startRow; r <= startRow + 15; r++) {
@@ -298,7 +298,7 @@ async function fillPlinthBlockSV005(worksheet, startRow, blockType, plinthData, 
     worksheet.getCell(`N${rowController}`).value = `ХК ${rackClean}.1`;
 
     worksheet.getCell(`N${rowBoard}`).value = plinthData.boardNumber;
-    
+
     const absNum = plinthData.plinthNumber;
     const group = Math.floor((absNum - 1) / 15) + 1;
     const holderValue = `ХВ-${rackClean}.${group}`;
@@ -335,7 +335,6 @@ async function fillPlinthBlockSV005(worksheet, startRow, blockType, plinthData, 
     const tm = plinthData.terminalMap || {};
     const cn = plinthData.cableNumbers || {};
 
-    // Проверяем, есть ли хоть одно устройство
     const hasDevices = Object.values(tm).some(v => v && v !== '');
     const roomText = hasDevices ? (plinthData.room || '') : 'Резерв';
 
@@ -386,7 +385,6 @@ async function fillPlinthBlockSV005(worksheet, startRow, blockType, plinthData, 
     worksheet.getCell(`L${devicesRow}`).value = hasSiren ? 'сирена' : '';
     worksheet.getCell(`M${devicesRow}`).value = hasSiren ? (cn.siren || '') : '';
 
-    // Заполняем ячейку помещения
     let roomRow = null;
     for (let r = devicesRow; r <= devicesRow + 5; r++) {
         const cell = worksheet.getCell(`B${r}`);
@@ -403,7 +401,7 @@ async function fillPlinthBlockSV005(worksheet, startRow, blockType, plinthData, 
     }
 }
 
-// ---------- Заполнение блока SV004 (с поддержкой "Резерв" для неиспользуемых пинов) ----------
+// ---------- Заполнение блока SV004 ----------
 async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel) {
     const groups = [
         { offsetDev: 14, offsetRoom: 15, pins: [0,1,2,3] }
@@ -448,7 +446,6 @@ async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel
             const cable = cm[pin] || '';
             let room = (rm[pin] && rm[pin].trim()) ? rm[pin] : '';
 
-            // Если устройство не выбрано, помечаем как "Резерв"
             if (!device) {
                 room = 'Резерв';
             }
@@ -456,7 +453,6 @@ async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel
             worksheet.getCell(`${colDevice}${devRow}`).value = device;
             worksheet.getCell(`${colCable}${devRow}`).value = cable;
 
-            // Заполняем ячейки помещения
             if (room === 'Резерв') {
                 worksheet.getCell(`${colDevice}${roomRow}`).value = 'Резерв';
                 worksheet.getCell(`${colCable}${roomRow}`).value = '';
@@ -471,7 +467,7 @@ async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel
     }
 }
 
-// ---------- Заполнение листов шпоргалка и Disp для SV004 (всегда добавляем строки для всех пинов) ----------
+// ---------- Заполнение листов шпоргалка и Disp для SV004 ----------
 function fillSheetsSV004(workbook, boards, globalModel) {
     const maxPlinthsPerController = 16;
     const allPlinths = [];
@@ -602,7 +598,7 @@ function fillSheetsSV004(workbook, boards, globalModel) {
     }
 }
 
-// ---------- Создание листов "шпоргалка" и "Шпора общая" для SV005 (всегда добавляем строки для каждого плинта) ----------
+// ---------- Создание листов "шпоргалка" и "Шпора общая" для SV005 ----------
 function createSheetsSV005(workbook, boards, globalModel) {
     const sheetNames = workbook.worksheets.map(s => s.name);
     if (sheetNames.includes('шпоргалка')) workbook.removeWorksheet('шпоргалка');
@@ -1085,7 +1081,112 @@ app.post('/generate-sv004', async (req, res) => {
     }
 });
 
-// ---------- Синхронизация проектов (добавлен cf_217) ----------
+// ---------- Синхронизация с SSE (прогресс) ----------
+app.get('/api/projects/sync-stream', async (req, res) => {
+    const apiKey = process.env.API_KEY;
+    const baseUrl = process.env.API_BASE_URL;
+
+    if (!apiKey || !baseUrl) {
+        res.status(500).json({ error: 'Не заданы API_KEY или API_BASE_URL в .env' });
+        return;
+    }
+
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*'
+    });
+
+    const sendEvent = (data) => {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    try {
+        sendEvent({ type: 'status', message: 'Начинаем загрузку списка проектов...' });
+
+        let allProjects = [];
+        let page = 1;
+        const perPage = 50;
+        let total = 0;
+
+        while (true) {
+            const url = `${baseUrl}?api_key=${apiKey}&page=${page}&per_page=${perPage}`;
+            sendEvent({ type: 'status', message: `Загружаем страницу ${page}...` });
+            const response = await fetch(url);
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`API вернул ${response.status}: ${errorText}`);
+            }
+            const data = await response.json();
+            const items = data.response?.items || [];
+            total = data.response?.total || 0;
+            allProjects = allProjects.concat(items);
+            sendEvent({ type: 'progress', loaded: allProjects.length, total: total });
+
+            if (allProjects.length >= total) break;
+            if (items.length < perPage) break;
+            page++;
+            if (page > 30) break;
+        }
+
+        sendEvent({ type: 'status', message: `Загружено ${allProjects.length} проектов. Обрабатываем детали...` });
+
+        const client = await pool.connect();
+        let processed = 0;
+        try {
+            await client.query('BEGIN');
+            for (const project of allProjects) {
+                const { id, name, is_archive } = project;
+                const isArchiveBool = (is_archive === 1 || is_archive === true);
+                let cf_92 = null;
+                let cf_217 = null;
+                try {
+                    const detailUrl = `https://inteko.aspro.cloud/api/v1/module/st/projects/get/${id}?api_key=${apiKey}`;
+                    const detailResponse = await fetch(detailUrl);
+                    if (detailResponse.ok) {
+                        const detailData = await detailResponse.json();
+                        cf_92 = detailData.response?.cf_92 || null;
+                        cf_217 = detailData.response?.cf_217 || null;
+                    }
+                } catch (err) {
+                    // игнорируем ошибки получения деталей
+                }
+
+                const check = await client.query('SELECT id FROM projects WHERE id = $1', [id]);
+                if (check.rows.length === 0) {
+                    await client.query(
+                        'INSERT INTO projects (id, name, is_archive, expanded_downloaded, cf_92, cf_217) VALUES ($1, $2, $3, $4, $5, $6)',
+                        [id, name, isArchiveBool, false, cf_92, cf_217]
+                    );
+                } else {
+                    await client.query(
+                        'UPDATE projects SET name = $1, is_archive = $2, cf_92 = $3, cf_217 = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5',
+                        [name, isArchiveBool, cf_92, cf_217, id]
+                    );
+                }
+                processed++;
+                if (processed % 10 === 0 || processed === allProjects.length) {
+                    sendEvent({ type: 'progress', processed: processed, total: allProjects.length });
+                }
+            }
+            await client.query('COMMIT');
+            sendEvent({ type: 'done', total: allProjects.length });
+        } catch (err) {
+            await client.query('ROLLBACK');
+            throw err;
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.error('Ошибка синхронизации:', error);
+        sendEvent({ type: 'error', message: error.message });
+    } finally {
+        res.end();
+    }
+});
+
+// ---------- Обычный POST для обратной совместимости (без прогресса) ----------
 app.post('/api/projects/sync', async (req, res) => {
     const apiKey = process.env.API_KEY;
     const baseUrl = process.env.API_BASE_URL;
@@ -1222,7 +1323,7 @@ app.post('/api/projects/update-status', async (req, res) => {
     }
 });
 
-// ---------- Получение проектов (добавлен cf_217) ----------
+// ---------- Получение проектов ----------
 app.get('/api/projects', async (req, res) => {
     const { onlyNotDownloaded } = req.query;
     try {
