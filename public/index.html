@@ -555,6 +555,7 @@
             width: 100%;
             border-collapse: collapse;
             font-size: 0.85rem;
+            cursor: default;
         }
         .projects-table th {
             background: #1e4663;
@@ -570,8 +571,15 @@
             border-bottom: 1px solid #e2edf7;
             vertical-align: middle;
         }
-        .projects-table tr:hover {
-            background: #f0f6fe;
+        .projects-table tbody tr {
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .projects-table tbody tr:hover {
+            background: #dbeafe !important;
+        }
+        .projects-table tbody tr:active {
+            background: #bfdbfe !important;
         }
 
         /* Колонки со ссылками — одинаковая ширина, одна строка */
@@ -590,6 +598,7 @@
             text-overflow: ellipsis;
             white-space: nowrap;
             vertical-align: middle;
+            pointer-events: auto; /* чтобы ссылки были кликабельны */
         }
 
         .status-badge {
@@ -628,6 +637,21 @@
         }
         .cf-link:hover {
             color: #0f2b4f;
+        }
+        /* Кнопка "Выбрать" в строке проекта */
+        .select-project-btn {
+            background: #1e4663;
+            border: none;
+            color: white;
+            padding: 2px 12px;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 0.7rem;
+            height: 26px;
+            white-space: nowrap;
+        }
+        .select-project-btn:hover {
+            background: #0f2b4f;
         }
     </style>
 </head>
@@ -1648,14 +1672,19 @@
             });
             if (!fileButtons) fileButtons = '—';
 
+            // Кнопка "Выбрать" и сама строка кликабельна
+            const projectNameEscaped = escapeHtml(name);
             html += `
-                <tr>
-                    <td><strong>${escapeHtml(name)}</strong></td>
+                <tr data-project-name="${escapeHtml(name)}" style="cursor:pointer;">
+                    <td><strong>${projectNameEscaped}</strong></td>
                     <td>${archiveText}</td>
                     <td><span class="status-badge ${statusClass}">${statusText}</span></td>
                     <td class="link-cell">${cfLink}</td>
                     <td class="link-cell">${ncLink}</td>
-                    <td>${fileButtons}</td>
+                    <td>
+                        ${fileButtons}
+                        <button class="select-project-btn" data-project-name="${escapeHtml(name)}" style="margin-left:6px;">📌 Выбрать</button>
+                    </td>
                 </tr>
             `;
         }
@@ -1663,8 +1692,10 @@
         html += `</tbody></table>`;
         container.innerHTML = html;
 
+        // Обработчики для кнопок скачивания
         container.querySelectorAll('.download-btn').forEach(btn => {
-            btn.addEventListener('click', async function() {
+            btn.addEventListener('click', async function(e) {
+                e.stopPropagation(); // чтобы не срабатывал выбор проекта
                 const fileName = this.dataset.filename;
                 try {
                     const response = await fetch(`/api/projects/download/${encodeURIComponent(fileName)}`);
@@ -1686,6 +1717,40 @@
                 }
             });
         });
+
+        // Обработчики для кнопок "Выбрать" и для самой строки (tr)
+        container.querySelectorAll('.select-project-btn').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const projectName = this.dataset.projectName;
+                selectProject(projectName);
+            });
+        });
+
+        container.querySelectorAll('.projects-table tbody tr').forEach(tr => {
+            tr.addEventListener('click', function() {
+                const projectName = this.dataset.projectName;
+                if (projectName) {
+                    selectProject(projectName);
+                }
+            });
+        });
+    }
+
+    // Функция выбора проекта и подстановки в поле адреса
+    function selectProject(projectName) {
+        if (!projectName) return;
+        const addressInput = document.getElementById('address');
+        if (addressInput) {
+            addressInput.value = projectName;
+            // Можно также скрыть выпадающий список подсказок
+            const suggestions = document.getElementById('projectSuggestions');
+            if (suggestions) suggestions.style.display = 'none';
+        }
+        // Закрыть модалку
+        const modal = document.getElementById('projectsModal');
+        if (modal) modal.classList.remove('active');
+        showMessage(`✅ Проект "${projectName}" выбран`, 'success');
     }
 
     // ---------- Отправка на сервер (генерация Excel) ----------
@@ -1881,10 +1946,11 @@
         renumberBoards();
     });
 
-    // ---------- ПОИСК ПРОЕКТОВ В СТРОКЕ "АДРЕС" (исправлено) ----------
+    // ---------- ПОИСК ПРОЕКТОВ В СТРОКЕ "АДРЕС" (с уведомлением о прогрессе) ----------
+    let searchTimeout = null;
+
     async function searchProjects(query, showArchived) {
         const container = document.getElementById('projectSuggestions');
-        // Проверяем, что контейнер существует
         if (!container) {
             console.error('❌ Контейнер #projectSuggestions не найден!');
             return;
@@ -1892,8 +1958,16 @@
 
         if (!query || query.length < 2) {
             container.style.display = 'none';
+            // Скрываем сообщение о поиске, если оно было
+            const msgDiv = document.getElementById('message');
+            if (msgDiv && msgDiv.innerHTML.includes('🔍 Ищем проекты...')) {
+                msgDiv.innerHTML = '';
+            }
             return;
         }
+
+        // Показываем уведомление о поиске
+        showMessage('🔍 Ищем проекты...', 'info');
 
         try {
             const params = new URLSearchParams({
@@ -1914,6 +1988,12 @@
             console.log(`   Всего найдено по названию: ${totalBefore}`);
             console.log(`   Архивных отсеяно: ${archivedCount}`);
             console.log(`   Показано: ${projects.length}`);
+
+            // Убираем сообщение о поиске, если оно всё ещё висит
+            const msgDiv = document.getElementById('message');
+            if (msgDiv && msgDiv.innerHTML.includes('🔍 Ищем проекты...')) {
+                msgDiv.innerHTML = '';
+            }
 
             container.innerHTML = '';
             if (projects.length === 0) {
@@ -1945,6 +2025,8 @@
             console.error('Ошибка поиска проектов:', error);
             container.innerHTML = `<div class="no-results" style="color:#b91c1c;">Ошибка: ${error.message}</div>`;
             container.style.display = 'block';
+            // Показываем ошибку в сообщении
+            showMessage(`❌ Ошибка поиска: ${error.message}`, 'error');
         }
     }
 
@@ -1954,7 +2036,6 @@
     const suggestionsContainer = document.getElementById('projectSuggestions');
 
     if (addressInput && showArchivedCheckbox && suggestionsContainer) {
-        let searchTimeout = null;
         addressInput.addEventListener('input', function() {
             clearTimeout(searchTimeout);
             const query = this.value.trim();
