@@ -1693,157 +1693,151 @@
         }
     }
 
-    function applyFiltersAndRender() {
-        const container = document.getElementById('projectsListContainer');
-        const searchText = document.getElementById('projectsSearch')?.value?.toLowerCase().trim() || '';
-        const archiveFilter = document.getElementById('projectsArchiveFilter')?.value || 'all';
+function applyFiltersAndRender() {
+    const container = document.getElementById('projectsListContainer');
+    const searchText = document.getElementById('projectsSearch')?.value?.toLowerCase().trim() || '';
+    const archiveFilter = document.getElementById('projectsArchiveFilter')?.value || 'all';
 
-        let filtered = allProjectsData;
+    let filtered = allProjectsData;
 
-        if (searchText) {
-            filtered = filtered.filter(p => p.name && p.name.toLowerCase().includes(searchText));
-        }
-
-        if (archiveFilter === 'active') {
-            filtered = filtered.filter(p => !p.is_archive);
-        } else if (archiveFilter === 'archived') {
-            filtered = filtered.filter(p => p.is_archive);
-        }
-
-        const grouped = {};
-        filtered.forEach(p => {
-            if (!grouped[p.name]) {
-                grouped[p.name] = {
-                    name: p.name,
-                    files: [],
-                    is_archive: p.is_archive,
-                    expanded_downloaded: false,
-                    cf_92: null,
-                    cf_217: null
-                };
-            }
-            grouped[p.name].files.push({
-                file_name: p.file_name,
-                file_path: p.file_path,
-                expanded_downloaded: p.expanded_downloaded
-            });
-            if (p.expanded_downloaded) {
-                grouped[p.name].expanded_downloaded = true;
-            }
-            if (p.cf_92 && !grouped[p.name].cf_92) {
-                grouped[p.name].cf_92 = p.cf_92;
-            }
-            if (p.cf_217 && !grouped[p.name].cf_217) {
-                grouped[p.name].cf_217 = p.cf_217;
-            }
-        });
-
-        if (Object.keys(grouped).length === 0) {
-            container.innerHTML = '<p>Нет проектов, соответствующих фильтрам</p>';
-            return;
-        }
-
-        let html = `
-            <table class="projects-table">
-                <thead>
-                    <tr>
-                        <th style="min-width:150px;">Название проекта</th>
-                        <th style="width:80px;">Архивный</th>
-                        <th style="width:120px;">Расшивки выгружены</th>
-                        <th class="link-cell">Ссылка на Google Диск</th>
-                        <th class="link-cell">Ссылка на NextCloud</th>
-                        <th style="min-width:200px;">Файлы</th>
-                    </tr>
-                </thead>
-                <tbody>
-        `;
-
-        for (const name in grouped) {
-            const group = grouped[name];
-            const statusClass = group.expanded_downloaded ? 'status-downloaded' : 'status-not-downloaded';
-            const statusText = group.expanded_downloaded ? '✅ Выгружены' : '❌ Не выгружены';
-            const archiveText = group.is_archive ? 'Да' : 'Нет';
-            const cfLink = group.cf_92 ? `<a href="${escapeHtml(group.cf_92)}" target="_blank" class="cf-link" title="${escapeHtml(group.cf_92)}">${escapeHtml(group.cf_92)}</a>` : '—';
-            const ncLink = group.cf_217 ? `<a href="${escapeHtml(group.cf_217)}" target="_blank" class="cf-link" title="${escapeHtml(group.cf_217)}">${escapeHtml(group.cf_217)}</a>` : '—';
-
-            let fileLinks = '';
-            group.files.forEach(f => {
-                if (f.file_name) {
-                    fileLinks += `<a href="#" class="file-download-link" data-filename="${f.file_name}">${f.file_name}</a>`;
-                }
-            });
-            if (!fileLinks) fileLinks = '—';
-
-            const encodedName = encodeURIComponent(name);
-            const escapedName = escapeHtml(name);
-
-            html += `
-                <tr data-project-name="${encodedName}" style="cursor:pointer;">
-                    <td><strong>${escapedName}</strong></td>
-                    <td>${archiveText}</td>
-                    <td><span class="status-badge ${statusClass}">${statusText}</span></td>
-                    <td class="link-cell">${cfLink}</td>
-                    <td class="link-cell">${ncLink}</td>
-                    <td>
-                        <div class="file-cell">
-                            <div class="file-links-container">${fileLinks}</div>
-                            <button class="select-project-btn" data-project-name="${encodedName}">📌 Выбрать</button>
-                        </div>
-                    </td>
-                </tr>
-            `;
-        }
-
-        html += `</tbody></table>`;
-        container.innerHTML = html;
-
-        container.querySelectorAll('.file-download-link').forEach(link => {
-            link.addEventListener('click', async function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                const fileName = this.dataset.filename;
-                try {
-                    const response = await fetch(`/api/projects/download/${encodeURIComponent(fileName)}`);
-                    if (!response.ok) {
-                        const err = await response.json();
-                        throw new Error(err.error || 'Ошибка скачивания');
-                    }
-                    const blob = await response.blob();
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = fileName;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                } catch (error) {
-                    showMessage(`Ошибка скачивания: ${error.message}`, 'error');
-                }
-            });
-        });
-
-        container.querySelectorAll('.select-project-btn').forEach(btn => {
-            btn.addEventListener('click', function(e) {
-                e.stopPropagation();
-                const encodedName = this.dataset.projectName;
-                if (encodedName) {
-                    const decodedName = decodeURIComponent(encodedName);
-                    selectProject(decodedName);
-                }
-            });
-        });
-
-        container.querySelectorAll('.projects-table tbody tr').forEach(tr => {
-            tr.addEventListener('click', function() {
-                const encodedName = this.dataset.projectName;
-                if (encodedName) {
-                    const decodedName = decodeURIComponent(encodedName);
-                    selectProject(decodedName);
-                }
-            });
-        });
+    if (searchText) {
+        filtered = filtered.filter(p => p.name && p.name.toLowerCase().includes(searchText));
     }
+
+    if (archiveFilter === 'active') {
+        filtered = filtered.filter(p => !p.is_archive);
+    } else if (archiveFilter === 'archived') {
+        filtered = filtered.filter(p => p.is_archive);
+    }
+
+    const grouped = {};
+    filtered.forEach(p => {
+        if (!grouped[p.name]) {
+            grouped[p.name] = {
+                name: p.name,
+                files: [],
+                is_archive: p.is_archive,
+                expanded_downloaded: false,
+                cf_92: null,
+                cf_217: null
+            };
+        }
+        grouped[p.name].files.push({
+            file_name: p.file_name,
+            file_path: p.file_path,
+            expanded_downloaded: p.expanded_downloaded
+        });
+        if (p.expanded_downloaded) {
+            grouped[p.name].expanded_downloaded = true;
+        }
+        if (p.cf_92 && !grouped[p.name].cf_92) {
+            grouped[p.name].cf_92 = p.cf_92;
+        }
+        if (p.cf_217 && !grouped[p.name].cf_217) {
+            grouped[p.name].cf_217 = p.cf_217;
+        }
+    });
+
+    if (Object.keys(grouped).length === 0) {
+        container.innerHTML = '<p>Нет проектов, соответствующих фильтрам</p>';
+        return;
+    }
+
+    let html = `
+        <table class="projects-table">
+            <thead>
+                <tr>
+                    <th style="min-width:150px;">Название проекта</th>
+                    <th style="width:80px;">Архивный</th>
+                    <th style="width:120px;">Расшивки выгружены</th>
+                    <th class="link-cell">Ссылка на Google Диск</th>
+                    <th class="link-cell">Ссылка на NextCloud</th>
+                    <th style="min-width:200px;">Файлы</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    for (const name in grouped) {
+        const group = grouped[name];
+        const statusClass = group.expanded_downloaded ? 'status-downloaded' : 'status-not-downloaded';
+        const statusText = group.expanded_downloaded ? '✅ Выгружены' : '❌ Не выгружены';
+        const archiveText = group.is_archive ? 'Да' : 'Нет';
+        const cfLink = group.cf_92 ? `<a href="${escapeHtml(group.cf_92)}" target="_blank" class="cf-link" title="${escapeHtml(group.cf_92)}">${escapeHtml(group.cf_92)}</a>` : '—';
+        const ncLink = group.cf_217 ? `<a href="${escapeHtml(group.cf_217)}" target="_blank" class="cf-link" title="${escapeHtml(group.cf_217)}">${escapeHtml(group.cf_217)}</a>` : '—';
+
+        let fileLinks = '';
+        group.files.forEach(f => {
+            if (f.file_name) {
+                fileLinks += `<a href="#" class="file-download-link" data-filename="${f.file_name}">${f.file_name}</a>`;
+            }
+        });
+        if (!fileLinks) fileLinks = '—';
+
+        const encodedName = encodeURIComponent(name);
+        const escapedName = escapeHtml(name);
+
+        html += `
+            <tr data-project-name="${encodedName}">
+                <td><strong>${escapedName}</strong></td>
+                <td>${archiveText}</td>
+                <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                <td class="link-cell">${cfLink}</td>
+                <td class="link-cell">${ncLink}</td>
+                <td>
+                    <div class="file-cell">
+                        <div class="file-links-container">${fileLinks}</div>
+                        <button class="select-project-btn" data-project-name="${encodedName}">📌 Выбрать</button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }
+
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+
+    // Обработчики для скачивания файлов
+    container.querySelectorAll('.file-download-link').forEach(link => {
+        link.addEventListener('click', async function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const fileName = this.dataset.filename;
+            try {
+                const response = await fetch(`/api/projects/download/${encodeURIComponent(fileName)}`);
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.error || 'Ошибка скачивания');
+                }
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } catch (error) {
+                showMessage(`Ошибка скачивания: ${error.message}`, 'error');
+            }
+        });
+    });
+
+    // Обработчики для кнопок "Выбрать"
+    container.querySelectorAll('.select-project-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const encodedName = this.dataset.projectName;
+            if (encodedName) {
+                const decodedName = decodeURIComponent(encodedName);
+                selectProject(decodedName);
+            }
+        });
+    });
+
+    // Удалён блок добавления клика на строку <tr>
+}
 
     // ---------- ВЫБОР ПРОЕКТА ----------
     function selectProject(projectName) {
