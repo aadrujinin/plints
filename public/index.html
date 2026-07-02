@@ -1620,24 +1620,52 @@
 
             // ---------- Парсинг Content-Disposition (RFC 5987) ----------
             const contentDisposition = response.headers.get('Content-Disposition');
+            console.log('📄 Content-Disposition:', contentDisposition); // отладка
             let filename = null;
             if (contentDisposition) {
                 // Пробуем RFC 5987: filename*=UTF-8''...
                 let match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
                 if (match) {
                     filename = decodeURIComponent(match[1]);
+                    console.log('✅ Имя получено из filename*=:', filename);
                 } else {
                     // Пробуем просто filename="..."
                     match = contentDisposition.match(/filename="([^"]+)"/);
                     if (match) {
                         filename = match[1];
+                        console.log('✅ Имя получено из filename="":', filename);
                     }
                 }
             }
-            // fallback на случай, если не удалось распарсить
+            // Если не удалось распарсить – берём имя из X-File-Path (последняя часть пути)
             if (!filename) {
-                filename = `${data.address}_${targetType}_${new Date().toISOString().slice(0,10)}.xlsx`;
+                const filePathHeader = response.headers.get('X-File-Path');
+                if (filePathHeader) {
+                    try {
+                        const decodedPath = decodeURIComponent(filePathHeader);
+                        const pathParts = decodedPath.split(/[\\/]/);
+                        filename = pathParts[pathParts.length - 1];
+                        console.log('✅ Имя извлечено из X-File-Path:', filename);
+                    } catch(e) {
+                        console.warn('⚠️ Не удалось извлечь имя из X-File-Path');
+                    }
+                }
             }
+            // Последний запасной вариант – генерируем имя сами (но уже без префикса)
+			if (!filename) {
+			// Берём адресную часть без префикса (эмулируем серверную логику)
+				let addressPart = data.address;
+				const eqIndex = addressPart.indexOf('=');
+				if (eqIndex !== -1) {
+					addressPart = addressPart.substring(eqIndex + 1).trim();
+			}
+    // Удаляем префикс с учётом кавычек (как на сервере)
+    addressPart = addressPart.replace(/^ПАО\s*_?\s*["']?ВЫМПЕЛКОМ["']?\s*_?\s*/i, '').trim();
+    const safeAddress = addressPart.replace(/[\\/:*?"<>|]/g, '_');
+    const dateStr = new Date().toISOString().slice(0, 10);
+    filename = `${safeAddress}_${dateStr}_${targetType}.xlsx`;
+    console.log('⚠️ Использован запасной вариант имени:', filename);
+}
             a.download = filename;
             document.body.appendChild(a);
             a.click();

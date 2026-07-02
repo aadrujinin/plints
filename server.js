@@ -596,18 +596,36 @@ function createSheetsSV005(workbook, boards, globalModel) {
     }
 }
 
-// ---------- Функция для извлечения адресной части (удаляем префикс "ПАО _ВЫМПЕЛКОМ_") ----------
+// ---------- ИСПРАВЛЕННАЯ ФУНКЦИЯ: удаление префикса с учётом кавычек ----------
 function extractAddressPart(fullName) {
     if (!fullName) return '';
-    const eqIndex = fullName.indexOf('=');
     let address = fullName;
-    if (eqIndex !== -1 && eqIndex < fullName.length - 1) {
-        address = fullName.substring(eqIndex + 1).trim();
+    const eqIndex = address.indexOf('=');
+    if (eqIndex !== -1) {
+        address = address.substring(eqIndex + 1).trim();
     }
-    // Удаляем префикс "ПАО _ВЫМПЕЛКОМ_ " (с учётом пробелов и подчёркиваний)
-    address = address.replace(/^ПАО\s*_?\s*ВЫМПЕЛКОМ\s*_?\s*/i, '');
+    // Удаляем префикс "ПАО _ВЫМПЕЛКОМ_" с возможными кавычками
+    // Регулярка: ПАО + необязательные пробелы/подчёркивания + возможно кавычка (одинарная или двойная) + ВЫМПЕЛКОМ + возможно кавычка + необязательные пробелы/подчёркивания
+    address = address.replace(/^ПАО\s*_?\s*["']?ВЫМПЕЛКОМ["']?\s*_?\s*/i, '');
+    // Дополнительная проверка на точные префиксы (разные варианты)
+    const prefixes = [
+        'ПАО _ВЫМПЕЛКОМ_',
+        'ПАО ВЫМПЕЛКОМ',
+        'ПАО_ВЫМПЕЛКОМ_',
+        'ПАО "ВЫМПЕЛКОМ"',
+        "ПАО 'ВЫМПЕЛКОМ'",
+        'ПАО "ВЫМПЕЛКОМ" ',
+        'ПАО "ВЫМПЕЛКОМ"',
+        'ПАО "ВЫМПЕЛКОМ" '
+    ];
+    for (const prefix of prefixes) {
+        if (address.startsWith(prefix)) {
+            address = address.substring(prefix.length).trim();
+            break;
+        }
+    }
     // Убираем лишние пробелы
-    address = address.replace(/\s+/g, ' ').trim();
+    address = address.trim();
     // Убираем начальные и конечные кавычки, скобки если есть
     address = address.replace(/^["']+|["']+$/g, '');
     return address;
@@ -761,13 +779,13 @@ app.post('/generate-sv005', async (req, res) => {
         const buffer = await workbook.xlsx.writeBuffer();
 
         const addressPart = extractAddressPart(address);
+        console.log('🧹 addressPart после очистки (SV005):', addressPart);
         const safeAddress = addressPart.replace(/[\\/:*?"<>|]/g, '_');
         const dateStr = new Date().toISOString().slice(0, 10);
         const filename = `${safeAddress}_${dateStr}_SV005.xlsx`;
 
         const filePath = saveFileToNetwork(buffer, filename, address);
 
-        // Используем RFC 5987 для корректной передачи имени с русскими буквами
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
         res.setHeader('X-File-Path', encodeURIComponent(filePath));
@@ -869,6 +887,7 @@ app.post('/generate-sv004', async (req, res) => {
         const buffer = await workbook.xlsx.writeBuffer();
 
         const addressPart = extractAddressPart(address);
+        console.log('🧹 addressPart после очистки (SV004):', addressPart);
         const safeAddress = addressPart.replace(/[\\/:*?"<>|]/g, '_');
         const dateStr = new Date().toISOString().slice(0, 10);
         const filename = `${safeAddress}_${dateStr}_SV004.xlsx`;
