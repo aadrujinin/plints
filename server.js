@@ -145,7 +145,9 @@ function copyBlock(worksheet, sourceStart, sourceEnd, targetStart) {
 // ---------- АВТОПОДГОН ШИРИНЫ СТОЛБЦОВ ----------
 function isPlinthSheet(sheetName) {
     const plinthSheetNames = ['Лист1', 'SV777-1 (SV004)'];
-    return plinthSheetNames.includes(sheetName);
+    if (plinthSheetNames.includes(sheetName)) return true;
+    if (sheetName.startsWith('Disp-')) return true;
+    return false;
 }
 
 function applyAutoFit(workbook) {
@@ -311,9 +313,15 @@ async function fillPlinthBlockSV005(worksheet, startRow, blockType, plinthData, 
     const group = Math.floor((absNum - 1) / 15) + 1;
     const holderValue = `ХВ-${rackClean}.${group}`;
     worksheet.getCell(`N${rowHolder}`).value = holderValue;
+    if (blockType === 'output') {
+        worksheet.getCell(`O${rowHolder}`).value = holderValue;
+    }
 
     worksheet.getCell(`N${rowPlinthNum}`).value = plinthData.plinthNumber;
     worksheet.getCell(`N${rowSkud}`).value = plinthData.skud;
+    if (blockType === 'output') {
+        worksheet.getCell(`O${rowSkud}`).value = plinthData.skud;
+    }
 
     let devicesRow = null;
     for (let r = startRow; r <= startRow + 50; r++) {
@@ -371,7 +379,7 @@ async function fillPlinthBlockSV005(worksheet, startRow, blockType, plinthData, 
     const hasLock = Object.values(tm).includes('lock');
     const hasFireLock = Object.values(tm).includes('fire_lock');
     if (hasLock) {
-        worksheet.getCell(`J${devicesRow}`).value = 'Замок';
+        worksheet.getCell(`J${devicesRow}`).value = 'замок';
         worksheet.getCell(`K${devicesRow}`).value = cn.lock || '';
     } else if (hasFireLock) {
         worksheet.getCell(`J${devicesRow}`).value = 'Замок пож.дв.';
@@ -417,6 +425,7 @@ async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel
 
     const rackClean = plinthData.rack.replace(/^ХК\s*/i, '');
     worksheet.getCell(`N${startRow}`).value = rackClean;
+    worksheet.getCell(`O${startRow}`).value = rackClean;
 
     const controllerRow = startRow + 1;
     const controllerCell = worksheet.getCell(`E${controllerRow}`);
@@ -424,7 +433,9 @@ async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel
     if (controllerText.includes('SV 777')) {
         controllerCell.value = controllerText.replace('SV 777', globalModel);
     }
-    worksheet.getCell(`N${controllerRow}`).value = `ХК ${rackClean}.1`;
+    const controllerVal = `ХК ${rackClean}.1`;
+    worksheet.getCell(`N${controllerRow}`).value = controllerVal;
+    worksheet.getCell(`O${controllerRow}`).value = controllerVal;
 
     const boardRow = startRow + 2;
     worksheet.getCell(`N${boardRow}`).value = plinthData.boardNumber;
@@ -554,53 +565,59 @@ function fillSheetsSV004(workbook, boards, globalModel) {
             }
         }
 
-        const leftData = cheatData.slice(0, 16);
-        const rightData = cheatData.slice(16, 32);
+        const firstBoard = groupPlinths.length > 0 ? boards[groupPlinths[0].boardIndex] : null;
+        const rackDisplay = firstBoard ? String(firstBoard.rack || '').trim() : '';
 
-        let dispRow = 2;
-        leftData.forEach((item, index) => {
-            const row = dispRow + index;
+        function formatDispText(item) {
+            if (!item) return 'Резерв';
             let roomNum = '';
-            let displayText = '';
             if (item.e && typeof item.e === 'string') {
                 if (item.e === 'Резерв') {
-                    displayText = 'Резерв';
+                    return 'Резерв';
                 } else if (item.e.startsWith('пом. ')) {
                     roomNum = item.e.substring(5).trim();
                 }
             }
-            const deviceText = item.d ? String(item.d) : '';
-            if (!displayText) {
-                displayText = roomNum ? `п.${roomNum} - ${deviceText}` : deviceText;
+            if (roomNum) {
+                const deviceText = item.d ? String(item.d) : '';
+                return `п.${roomNum} - ${deviceText}`;
             }
-            const num = item.g ? String(item.g) : String(index + 1);
-            dispSheet.getCell(`B${row}`).value = num;
-            dispSheet.getCell(`C${row}`).value = displayText;
-            dispSheet.getCell(`D${row}`).value = num;
-            dispSheet.getCell(`E${row}`).value = displayText;
-        });
+            return 'Резерв';
+        }
 
-        rightData.forEach((item, index) => {
-            const row = dispRow + index;
-            let roomNum = '';
-            let displayText = '';
-            if (item.e && typeof item.e === 'string') {
-                if (item.e === 'Резерв') {
-                    displayText = 'Резерв';
-                } else if (item.e.startsWith('пом. ')) {
-                    roomNum = item.e.substring(5).trim();
+        function fillPanel(dispSheet, startRow, startNum) {
+            for (let i = 0; i < 16; i++) {
+                const row = startRow + i;
+                const leftIdx = startNum - 1 + i;
+                const leftItem = cheatData[leftIdx];
+                const leftText = leftItem ? formatDispText(leftItem) : 'Резерв';
+                const leftNum = leftItem && leftItem.g ? String(leftItem.g) : String(startNum + i);
+                dispSheet.getCell(`B${row}`).value = leftNum;
+                dispSheet.getCell(`C${row}`).value = leftText;
+                dispSheet.getCell(`D${row}`).value = leftNum;
+                dispSheet.getCell(`E${row}`).value = leftText;
+
+                const rightItemNum = startNum + 16 + i;
+                if (i === 15) {
+                    dispSheet.getCell(`F${row}`).value = String(rightItemNum);
+                    dispSheet.getCell(`G${row}`).value = rackDisplay;
+                    dispSheet.getCell(`H${row}`).value = String(rightItemNum);
+                    dispSheet.getCell(`I${row}`).value = 'IP';
+                } else {
+                    const rightIdx = startNum - 1 + 16 + i;
+                    const rightItem = cheatData[rightIdx];
+                    const rightText = rightItem ? formatDispText(rightItem) : 'Резерв';
+                    const rightNum = rightItem && rightItem.g ? String(rightItem.g) : String(rightItemNum);
+                    dispSheet.getCell(`F${row}`).value = rightNum;
+                    dispSheet.getCell(`G${row}`).value = rightText;
+                    dispSheet.getCell(`H${row}`).value = rightNum;
+                    dispSheet.getCell(`I${row}`).value = rightText;
                 }
             }
-            const deviceText = item.d ? String(item.d) : '';
-            if (!displayText) {
-                displayText = roomNum ? `п.${roomNum} - ${deviceText}` : deviceText;
-            }
-            const num = item.g ? String(item.g) : String(17 + index);
-            dispSheet.getCell(`F${row}`).value = num;
-            dispSheet.getCell(`G${row}`).value = displayText;
-            dispSheet.getCell(`H${row}`).value = num;
-            dispSheet.getCell(`I${row}`).value = displayText;
-        });
+        }
+
+        fillPanel(dispSheet, 2, 1);
+        fillPanel(dispSheet, 21, 33);
 
         dispSheet.getCell(`K2`).value = `Display panel №${g+1}`;
     }
