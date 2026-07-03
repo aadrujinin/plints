@@ -4,7 +4,6 @@ const ExcelJS = require('exceljs');
 const path = require('path');
 const fs = require('fs');
 const { Pool } = require('pg');
-// googleapis удалён
 
 const app = express();
 const PORT = 3000;
@@ -32,9 +31,7 @@ const pool = new Pool({
     database: process.env.DB_NAME,
 });
 
-// ---------- Инициализация Google Drive API (УДАЛЕНО) ----------
-
-// ---------- Создание/обновление таблицы проектов ----------
+// ---------- Инициализация таблицы проектов ----------
 async function initDatabase() {
     const createQuery = `
         CREATE TABLE IF NOT EXISTS projects (
@@ -478,280 +475,203 @@ async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel
     }
 }
 
-// ---------- ЗАПОЛНЕНИЕ ЛИСТОВ ШПОРГАЛКА И DISP ДЛЯ SV004 ----------
+// ---------- ЗАПОЛНЕНИЕ ЛИСТОВ ШПОРГАЛКА И DISP ДЛЯ SV004 (ИСПРАВЛЕННАЯ ВЕРСИЯ) ----------
 function fillSheetsSV004(workbook, boards, globalModel) {
-    const maxPlinthsPerController = 16;
+    // Собираем все плинты (все board.plinth1 и board.plinth2) в один массив
     const allPlinths = [];
     boards.forEach((board, idx) => {
         allPlinths.push({ boardIndex: idx, plinth: board.plinth1, type: 'input' });
         allPlinths.push({ boardIndex: idx, plinth: board.plinth2, type: 'output' });
     });
 
-    const groups = [];
-    for (let i = 0; i < allPlinths.length; i += maxPlinthsPerController) {
-        groups.push(allPlinths.slice(i, i + maxPlinthsPerController));
+    // Получаем нужные листы
+    const cheatSheet = workbook.getWorksheet('шпоргалка-1');
+    const dispSheet = workbook.getWorksheet('Disp-1');
+    if (!cheatSheet || !dispSheet) {
+        console.warn('⚠️ Листы шпоргалка-1 или Disp-1 не найдены, пропускаем заполнение');
+        return;
     }
 
-    const sheetNames = workbook.worksheets.map(s => s.name);
-    for (let g = 0; g < groups.length; g++) {
-        const groupPlinths = groups[g];
-        const cheatSheetName = `шпоргалка-${g+1}`;
-        const dispSheetName = `Disp-${g+1}`;
-        if (!sheetNames.includes(cheatSheetName) || !sheetNames.includes(dispSheetName)) {
-            console.warn(`⚠️ Листы ${cheatSheetName} или ${dispSheetName} не найдены, пропускаем`);
-            continue;
-        }
-        const cheatSheet = workbook.getWorksheet(cheatSheetName);
-        const dispSheet = workbook.getWorksheet(dispSheetName);
+    // Очищаем старые данные в шпоргалка-1 (строки начиная с 4)
+    if (cheatSheet.rowCount >= 4) {
+        cheatSheet.spliceRows(4, cheatSheet.rowCount - 3);
+    }
 
-        const cheatLastRow = cheatSheet.rowCount;
-        for (let r = 4; r <= cheatLastRow; r++) {
-            for (let col = 1; col <= 7; col++) {
-                cheatSheet.getCell(r, col).value = null;
-            }
-        }
-        const dispLastRow = dispSheet.rowCount;
-        for (let r = 2; r <= dispLastRow; r++) {
-            for (let col = 2; col <= 9; col++) {
-                dispSheet.getCell(r, col).value = null;
-            }
-        }
+    // Очищаем старые данные в Disp-1 (строки начиная с 2)
+    if (dispSheet.rowCount >= 2) {
+        dispSheet.spliceRows(2, dispSheet.rowCount - 1);
+    }
 
-        let rowIdx = 4;
-        let counter = 1;
-        for (let i = 0; i < groupPlinths.length; i++) {
-            const plinthData = groupPlinths[i].plinth;
-            const plinthNumber = plinthData.number;
-            const tm = plinthData.terminalMap || {};
-            const cm = plinthData.cableMap || {};
-            const rm = plinthData.roomMap || {};
-            for (let pin = 0; pin <= 3; pin++) {
-                const device = tm[pin] || '';
-                const cable = cm[pin] || '';
-                let room = (rm[pin] && rm[pin].trim()) ? rm[pin] : '';
-                if (!device) {
-                    room = 'Резерв';
-                }
-                cheatSheet.getCell(`A${rowIdx}`).value = '';
-                cheatSheet.getCell(`B${rowIdx}`).value = plinthNumber;
-                cheatSheet.getCell(`C${rowIdx}`).value = `Пин${pin}`;
-                cheatSheet.getCell(`D${rowIdx}`).value = device;
-                cheatSheet.getCell(`E${rowIdx}`).value = room ? (room === 'Резерв' ? 'Резерв' : `пом. ${room}`) : '';
-                cheatSheet.getCell(`F${rowIdx}`).value = cable ? `ШЛ.${cable}` : '';
-                cheatSheet.getCell(`G${rowIdx}`).value = counter++;
-                rowIdx++;
+    // Заполняем шпоргалка-1
+    let rowIdx = 4;
+    let counter = 1;
+    for (let i = 0; i < allPlinths.length; i++) {
+        const plinthData = allPlinths[i].plinth;
+        const plinthNumber = plinthData.number;
+        const tm = plinthData.terminalMap || {};
+        const cm = plinthData.cableMap || {};
+        const rm = plinthData.roomMap || {};
+        // Для каждого пина (0-3) создаём строку
+        for (let pin = 0; pin <= 3; pin++) {
+            const device = tm[pin] || '';
+            const cable = cm[pin] || '';
+            let room = (rm[pin] && rm[pin].trim()) ? rm[pin] : '';
+            if (!device) {
+                room = 'Резерв';
             }
+            cheatSheet.getCell(`A${rowIdx}`).value = '';
+            cheatSheet.getCell(`B${rowIdx}`).value = plinthNumber;
+            cheatSheet.getCell(`C${rowIdx}`).value = `Пин${pin}`;
+            cheatSheet.getCell(`D${rowIdx}`).value = device;
+            cheatSheet.getCell(`E${rowIdx}`).value = room ? (room === 'Резерв' ? 'Резерв' : `пом. ${room}`) : '';
+            cheatSheet.getCell(`F${rowIdx}`).value = cable ? `ШЛ.${cable}` : '';
+            cheatSheet.getCell(`G${rowIdx}`).value = counter++;
             rowIdx++;
         }
+        rowIdx++; // пустая строка между плинтами
+    }
 
-        const cheatData = [];
-        for (let r = 4; r < rowIdx; r++) {
-            const b = cheatSheet.getCell(`B${r}`).value;
-            const c = cheatSheet.getCell(`C${r}`).value;
-            const d = cheatSheet.getCell(`D${r}`).value;
-            const e = cheatSheet.getCell(`E${r}`).value;
-            const f = cheatSheet.getCell(`F${r}`).value;
-            const g = cheatSheet.getCell(`G${r}`).value;
-            if (b || c || d || e || f || g) {
-                cheatData.push({ b, c, d, e, f, g });
+    // Теперь заполняем Disp-1, разбивая записи на пары
+    // Сначала собираем все записи из шпоргалка-1 (начиная с 4 строки)
+    const records = [];
+    for (let r = 4; r < rowIdx; r++) {
+        const b = cheatSheet.getCell(`B${r}`).value;
+        const c = cheatSheet.getCell(`C${r}`).value;
+        const d = cheatSheet.getCell(`D${r}`).value;
+        const e = cheatSheet.getCell(`E${r}`).value;
+        const f = cheatSheet.getCell(`F${r}`).value;
+        const g = cheatSheet.getCell(`G${r}`).value;
+        if (b || c || d || e || f || g) {
+            records.push({ b, c, d, e, f, g });
+        }
+    }
+
+    // Заполняем Disp-1 парами записей
+    let dispRow = 2;
+    for (let i = 0; i < records.length; i += 2) {
+        const left = records[i];
+        const right = records[i + 1] || null;
+
+        // Левая часть
+        let roomNumLeft = '';
+        let displayTextLeft = '';
+        if (left && left.e && typeof left.e === 'string') {
+            if (left.e === 'Резерв') {
+                displayTextLeft = 'Резерв';
+            } else if (left.e.startsWith('пом. ')) {
+                roomNumLeft = left.e.substring(5).trim();
             }
         }
+        const deviceTextLeft = left && left.d ? String(left.d) : '';
+        if (!displayTextLeft) {
+            displayTextLeft = roomNumLeft ? `п.${roomNumLeft} - ${deviceTextLeft}` : deviceTextLeft;
+        }
+        const numLeft = left && left.g ? String(left.g) : String(i + 1);
+        dispSheet.getCell(`B${dispRow}`).value = numLeft;
+        dispSheet.getCell(`C${dispRow}`).value = displayTextLeft;
+        dispSheet.getCell(`D${dispRow}`).value = numLeft;
+        dispSheet.getCell(`E${dispRow}`).value = displayTextLeft;
 
-        const leftData = cheatData.slice(0, 16);
-        const rightData = cheatData.slice(16, 32);
-
-        let dispRow = 2;
-        leftData.forEach((item, index) => {
-            const row = dispRow + index;
-            let roomNum = '';
-            let displayText = '';
-            if (item.e && typeof item.e === 'string') {
-                if (item.e === 'Резерв') {
-                    displayText = 'Резерв';
-                } else if (item.e.startsWith('пом. ')) {
-                    roomNum = item.e.substring(5).trim();
+        // Правая часть (если есть)
+        if (right) {
+            let roomNumRight = '';
+            let displayTextRight = '';
+            if (right.e && typeof right.e === 'string') {
+                if (right.e === 'Резерв') {
+                    displayTextRight = 'Резерв';
+                } else if (right.e.startsWith('пом. ')) {
+                    roomNumRight = right.e.substring(5).trim();
                 }
             }
-            const deviceText = item.d ? String(item.d) : '';
-            if (!displayText) {
-                displayText = roomNum ? `п.${roomNum} - ${deviceText}` : deviceText;
+            const deviceTextRight = right.d ? String(right.d) : '';
+            if (!displayTextRight) {
+                displayTextRight = roomNumRight ? `п.${roomNumRight} - ${deviceTextRight}` : deviceTextRight;
             }
-            const num = item.g ? String(item.g) : String(index + 1);
-            dispSheet.getCell(`B${row}`).value = num;
-            dispSheet.getCell(`C${row}`).value = displayText;
-            dispSheet.getCell(`D${row}`).value = num;
-            dispSheet.getCell(`E${row}`).value = displayText;
-        });
+            const numRight = right.g ? String(right.g) : String(i + 2);
+            dispSheet.getCell(`F${dispRow}`).value = numRight;
+            dispSheet.getCell(`G${dispRow}`).value = displayTextRight;
+            dispSheet.getCell(`H${dispRow}`).value = numRight;
+            dispSheet.getCell(`I${dispRow}`).value = displayTextRight;
+        } else {
+            // Если правой записи нет, очищаем правую часть
+            dispSheet.getCell(`F${dispRow}`).value = null;
+            dispSheet.getCell(`G${dispRow}`).value = null;
+            dispSheet.getCell(`H${dispRow}`).value = null;
+            dispSheet.getCell(`I${dispRow}`).value = null;
+        }
 
-        rightData.forEach((item, index) => {
-            const row = dispRow + index;
-            let roomNum = '';
-            let displayText = '';
-            if (item.e && typeof item.e === 'string') {
-                if (item.e === 'Резерв') {
-                    displayText = 'Резерв';
-                } else if (item.e.startsWith('пом. ')) {
-                    roomNum = item.e.substring(5).trim();
-                }
-            }
-            const deviceText = item.d ? String(item.d) : '';
-            if (!displayText) {
-                displayText = roomNum ? `п.${roomNum} - ${deviceText}` : deviceText;
-            }
-            const num = item.g ? String(item.g) : String(17 + index);
-            dispSheet.getCell(`F${row}`).value = num;
-            dispSheet.getCell(`G${row}`).value = displayText;
-            dispSheet.getCell(`H${row}`).value = num;
-            dispSheet.getCell(`I${row}`).value = displayText;
-        });
+        dispRow++;
+    }
 
-        dispSheet.getCell(`K2`).value = `Display panel №${g+1}`;
+    // Устанавливаем заголовок Disp-1 (ячейка K2)
+    dispSheet.getCell('K2').value = `Display panel №1`;
+
+    // Очищаем и удаляем лишние листы (шпоргалка-2, шпоргалка-3, Disp-2, Disp-3)
+    const sheetsToClear = ['шпоргалка-2', 'шпоргалка-3', 'Disp-2', 'Disp-3'];
+    for (const name of sheetsToClear) {
+        const sheet = workbook.getWorksheet(name);
+        if (sheet) {
+            // Удаляем все строки, кроме заголовков (если они есть)
+            if (sheet.rowCount >= 3) {
+                sheet.spliceRows(3, sheet.rowCount - 2);
+            }
+            if (sheet.rowCount >= 2) {
+                sheet.spliceRows(2, sheet.rowCount - 1);
+            }
+            // Можно также удалить сам лист, но оставим пустым
+            // workbook.removeWorksheet(name);
+        }
     }
 }
 
-// ---------- СОЗДАНИЕ ЛИСТОВ "ШПОРГАЛКА" И "ШПОРА ОБЩАЯ" ДЛЯ SV005 ----------
-function createSheetsSV005(workbook, boards, globalModel) {
-    const sheetNames = workbook.worksheets.map(s => s.name);
-    if (sheetNames.includes('шпоргалка')) workbook.removeWorksheet('шпоргалка');
-    if (sheetNames.includes('Шпора общая')) workbook.removeWorksheet('Шпора общая');
-
-    const cheatSheet = workbook.addWorksheet('шпоргалка', { properties: { tabColor: { argb: 'FFE0E0E0' } } });
-    cheatSheet.getCell('C2').value = `${globalModel} - 1`;
-    cheatSheet.getCell('C2').font = { bold: true, size: 12 };
-
-    let rowIdx = 4;
-    let counter = 1;
-
-    for (let i = 0; i < boards.length; i++) {
-        const board = boards[i];
-        const boardNumber = i + 1;
-        const commonRoom = board.plinth1.room || '';
-
-        const num1 = i * 2 + 1;
-        const num2 = i * 2 + 2;
-
-        const tm1 = board.plinth1.terminalMap || {};
-        const cn1 = board.plinth1.cableNumbers || {};
-        const hasReader1 = Object.values(tm1).includes('reader');
-        const hasLock1 = Object.values(tm1).includes('lock');
-        const hasFireLock1 = Object.values(tm1).includes('fire_lock');
-
-        const rowR1 = rowIdx;
-        cheatSheet.getCell(`A${rowR1}`).value = '';
-        cheatSheet.getCell(`B${rowR1}`).value = boardNumber;
-        cheatSheet.getCell(`C${rowR1}`).value = `R${num1}`;
-        if (hasReader1) {
-            cheatSheet.getCell(`D${rowR1}`).value = 'Считыватель вх';
-            cheatSheet.getCell(`F${rowR1}`).value = `ШЛ.${cn1.reader || ''}`;
-            cheatSheet.getCell(`G${rowR1}`).value = counter++;
-        } else {
-            cheatSheet.getCell(`D${rowR1}`).value = '';
-            cheatSheet.getCell(`F${rowR1}`).value = '';
-            cheatSheet.getCell(`G${rowR1}`).value = '';
+// ---------- СОЗДАНИЕ ЛИСТА "Шпоргалка общая" ДЛЯ SV004 (ИСПРАВЛЕННАЯ ВЕРСИЯ) ----------
+function createCommonCheatSheetSV004(workbook) {
+    const commonSheetName = 'Шпоргалка общая';
+    let commonSheet = workbook.getWorksheet(commonSheetName);
+    if (!commonSheet) {
+        commonSheet = workbook.addWorksheet(commonSheetName);
+    } else {
+        // Очищаем все строки, кроме заголовка (строки 1-2)
+        if (commonSheet.rowCount >= 2) {
+            commonSheet.spliceRows(2, commonSheet.rowCount - 1);
         }
-        if (commonRoom) {
-            cheatSheet.getCell(`E${rowR1}`).value = `пом. ${commonRoom}`;
-        } else {
-            const hasAnyDevice1 = Object.values(tm1).some(v => v && v !== '');
-            cheatSheet.getCell(`E${rowR1}`).value = hasAnyDevice1 ? '' : 'Резерв';
-        }
-        rowIdx++;
-
-        const rowD1 = rowIdx;
-        cheatSheet.getCell(`A${rowD1}`).value = '';
-        cheatSheet.getCell(`B${rowD1}`).value = '';
-        cheatSheet.getCell(`C${rowD1}`).value = `D${num1}`;
-        if (hasLock1) {
-            cheatSheet.getCell(`D${rowD1}`).value = 'Замок';
-        } else if (hasFireLock1) {
-            cheatSheet.getCell(`D${rowD1}`).value = 'Замок пож.дв.';
-        } else {
-            cheatSheet.getCell(`D${rowD1}`).value = '';
-        }
-        if (commonRoom) {
-            cheatSheet.getCell(`E${rowD1}`).value = `пом. ${commonRoom}`;
-        } else {
-            const hasAnyDevice1 = Object.values(tm1).some(v => v && v !== '');
-            cheatSheet.getCell(`E${rowD1}`).value = hasAnyDevice1 ? '' : 'Резерв';
-        }
-        cheatSheet.getCell(`F${rowD1}`).value = board.skud1 ? `СКД.${board.skud1}` : '';
-        rowIdx++;
-
-        if (hasReader1 || hasLock1 || hasFireLock1) {
-            cheatSheet.mergeCells(`G${rowR1}:G${rowD1}`);
-            cheatSheet.getCell(`G${rowR1}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0000' } };
-        }
-
-        const tm2 = board.plinth2.terminalMap || {};
-        const cn2 = board.plinth2.cableNumbers || {};
-        const hasReader2 = Object.values(tm2).includes('reader');
-        const hasLock2 = Object.values(tm2).includes('lock');
-        const hasFireLock2 = Object.values(tm2).includes('fire_lock');
-
-        const rowR2 = rowIdx;
-        cheatSheet.getCell(`A${rowR2}`).value = '';
-        cheatSheet.getCell(`B${rowR2}`).value = '';
-        cheatSheet.getCell(`C${rowR2}`).value = `R${num2}`;
-        if (hasReader2) {
-            cheatSheet.getCell(`D${rowR2}`).value = board.plinth2.deviceLabel || 'Считыватель вых';
-            cheatSheet.getCell(`F${rowR2}`).value = `ШЛ.${cn2.reader || ''}`;
-            cheatSheet.getCell(`G${rowR2}`).value = counter++;
-        } else {
-            cheatSheet.getCell(`D${rowR2}`).value = '';
-            cheatSheet.getCell(`F${rowR2}`).value = '';
-            cheatSheet.getCell(`G${rowR2}`).value = '';
-        }
-        const room2 = board.plinth2.room || '';
-        if (room2) {
-            cheatSheet.getCell(`E${rowR2}`).value = `пом. ${room2}`;
-        } else {
-            const hasAnyDevice2 = Object.values(tm2).some(v => v && v !== '');
-            cheatSheet.getCell(`E${rowR2}`).value = hasAnyDevice2 ? '' : 'Резерв';
-        }
-        rowIdx++;
-
-        const rowD2 = rowIdx;
-        cheatSheet.getCell(`A${rowD2}`).value = '';
-        cheatSheet.getCell(`B${rowD2}`).value = '';
-        cheatSheet.getCell(`C${rowD2}`).value = `D${num2}`;
-        if (hasLock2) {
-            cheatSheet.getCell(`D${rowD2}`).value = 'Замок';
-        } else if (hasFireLock2) {
-            cheatSheet.getCell(`D${rowD2}`).value = 'Замок пож.дв.';
-        } else {
-            cheatSheet.getCell(`D${rowD2}`).value = '';
-        }
-        if (room2) {
-            cheatSheet.getCell(`E${rowD2}`).value = `пом. ${room2}`;
-        } else {
-            const hasAnyDevice2 = Object.values(tm2).some(v => v && v !== '');
-            cheatSheet.getCell(`E${rowD2}`).value = hasAnyDevice2 ? '' : 'Резерв';
-        }
-        cheatSheet.getCell(`F${rowD2}`).value = board.skud2 ? `СКД.${board.skud2}` : '';
-        rowIdx++;
-
-        if (hasReader2) {
-            const fillColorR2 = (board.plinth2.deviceLabel === 'Считыватель вх') ? 'FFA500' : 'FF0000';
-            cheatSheet.getCell(`G${rowR2}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillColorR2 } };
-            cheatSheet.getCell(`G${rowD2}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0000' } };
-        }
-
-        rowIdx++;
     }
 
-    const commonSheet = workbook.addWorksheet('Шпора общая', { properties: { tabColor: { argb: 'FFE0E0FF' } } });
-    const cheatRows = cheatSheet.rowCount;
-    const cheatCols = cheatSheet.columnCount || 7;
-    for (let r = 1; r <= cheatRows; r++) {
-        for (let c = 1; c <= cheatCols; c++) {
-            const srcCell = cheatSheet.getCell(r, c);
-            const dstCell = commonSheet.getCell(r, c);
-            if (srcCell.value) {
-                dstCell.value = srcCell.value;
-            }
-            if (r === 2 && c === 3) {
-                dstCell.font = srcCell.font;
-            }
+    // Копируем заголовок (строка 2) из шпоргалка-1
+    const firstCheat = workbook.getWorksheet('шпоргалка-1');
+    if (firstCheat) {
+        const srcRow = firstCheat.getRow(2);
+        const dstRow = commonSheet.getRow(2);
+        srcRow.eachCell((cell, colNumber) => {
+            dstRow.getCell(colNumber).value = cell.value;
+            if (cell.style) dstRow.getCell(colNumber).style = { ...cell.style };
+        });
+        dstRow.height = srcRow.height;
+    }
+
+    let targetRowIndex = 4; // Данные начинаются с 4-й строки
+
+    // Копируем данные только из шпоргалка-1
+    const cheatSheet = workbook.getWorksheet('шпоргалка-1');
+    if (cheatSheet) {
+        const lastRow = cheatSheet.rowCount;
+        for (let r = 4; r <= lastRow; r++) {
+            const srcRow = cheatSheet.getRow(r);
+            let hasData = false;
+            srcRow.eachCell((cell) => {
+                if (cell.value !== undefined && cell.value !== null && cell.value !== '') {
+                    hasData = true;
+                }
+            });
+            if (!hasData) continue;
+
+            const dstRow = commonSheet.getRow(targetRowIndex);
+            srcRow.eachCell((cell, colNumber) => {
+                dstRow.getCell(colNumber).value = cell.value;
+                if (cell.style) dstRow.getCell(colNumber).style = { ...cell.style };
+            });
+            dstRow.height = srcRow.height;
+            targetRowIndex++;
         }
     }
 }
@@ -806,8 +726,6 @@ function saveFileToNetwork(buffer, fileName, projectName) {
     fs.writeFileSync(fullPath, buffer);
     return fullPath;
 }
-
-// ---------- ЗАГРУЗКА НА GOOGLE DRIVE (УДАЛЕНО) ----------
 
 // ---------- МАРШРУТЫ ГЕНЕРАЦИИ ----------
 app.post('/generate-sv005', async (req, res) => {
@@ -1076,7 +994,11 @@ app.post('/generate-sv004', async (req, res) => {
             }
         }
 
+        // ЗАПОЛНЯЕМ ТОЛЬКО шпоргалка-1 И Disp-1
         fillSheetsSV004(workbook, boards, globalModel);
+
+        // Создаём общую шпоргалку из данных шпоргалка-1
+        createCommonCheatSheetSV004(workbook);
 
         applyAutoFit(workbook);
 
