@@ -1576,6 +1576,161 @@ app.post('/api/projects/add-file-confirm', async (req, res) => {
     }
 });
 
+// ---------- ИМПОРТ XLSX ----------
+app.post('/api/import-xlsx', upload.single('file'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'Файл не выбран' });
+    const tempPath = req.file.path;
+    try {
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.readFile(tempPath);
+        try { fs.unlinkSync(tempPath); } catch (_) {}
+
+        const sheetNames = workbook.worksheets.map(s => s.name);
+        const isSV004 = sheetNames.some(n => n.includes('SV004') || n.startsWith('шпоргалка-') || n.startsWith('Disp-'));
+        const isSV005 = !isSV004 && (sheetNames.some(n => n === 'Лист1' || n === 'шпоргалка' || n === 'Шпора общая'));
+
+        const origName = req.file.originalname || '';
+        const addrMatch = origName.match(/^(.+?)_(20\d{2})/);
+        if (addrMatch) result.address = addrMatch[1].replace(/_/g, ' ').trim();
+
+        const mainSheet = workbook.worksheets[0];
+        if (!mainSheet) return res.status(400).json({ error: 'Нет листов в книге' });
+
+        const result = { type: isSV004 ? 'SV004' : 'SV005', address: '', rack: '', boards: [] };
+
+        if (isSV005) {
+            const blocks = getBlocksSV005(mainSheet);
+            if (blocks.length === 0) return res.status(400).json({ error: 'Не найдены блоки Стойка' });
+            for (let bi = 0; bi < blocks.length; bi += 2) {
+                const inputBlock = blocks[bi];
+                const outputBlock = (bi + 1 < blocks.length) ? blocks[bi + 1] : null;
+                const startRow = inputBlock.startRow;
+                const rackClean = String(mainSheet.getCell(`N${startRow}`).value ?? '');
+                if (!result.rack) result.rack = rackClean;
+                const boardNum = parseInt(mainSheet.getCell(`N${startRow + 2}`).value) || (bi / 2 + 1);
+                const plinth1Num = parseInt(mainSheet.getCell(`N${startRow + 4}`).value) || 0;
+                const plinth2Num = outputBlock ? (parseInt(mainSheet.getCell(`N${outputBlock.startRow + 4}`).value) || 0) : 0;
+                const skud1 = String(mainSheet.getCell(`N${startRow + 5}`).value ?? '').trim();
+                const skud2 = outputBlock ? String(mainSheet.getCell(`N${outputBlock.startRow + 5}`).value ?? '').trim() : '';
+                function findDevicesRow(block) {
+                    for (let r = block.startRow; r <= block.endRow + 15; r++) {
+                        const cell = mainSheet.getCell(`D${r}`);
+                        const text = getCellText(cell);
+                        if (text.includes('Считыватель')) return r;
+                    }
+                    return null;
+                }
+                function findRoomRow(devRow) {
+                    for (let r = devRow + 1; r <= devRow + 5; r++) {
+                        const cell = mainSheet.getCell(`B${r}`);
+                        const text = getCellText(cell);
+                        if (text.includes('пом.') || text.includes('Резерв')) return r;
+                    }
+                    return null;
+                }
+                function parsePlinth(block) {
+                    const dr = findDevicesRow(block);
+                    const tm = {}; const cn = {};
+                    if (dr) {
+                        const dVal = getCellText(mainSheet.getCell(`D${dr}`));
+                        if (dVal.includes('Считыватель')) {
+                            tm[0] = 'reader'; tm[1] = 'reader'; tm[2] = 'reader'; tm[3] = 'reader';
+                            cn.reader = getCellText(mainSheet.getCell(`F${dr}`));
+                        }
+                        const jVal = getCellText(mainSheet.getCell(`J${dr}`));
+                        if (jVal.includes('замок') || jVal.includes('Замок')) {
+                            if (jVal.includes('пож')) { tm[4] = 'fire_lock'; cn.fire_lock = getCellText(mainSheet.getCell(`K${dr}`)); }
+                            else { tm[4] = 'lock'; cn.lock = getCellText(mainSheet.getCell(`K${dr}`)); }
+                        }
+                        const lVal = getCellText(mainSheet.getCell(`L${dr}`));
+                        if (lVal === 'сирена') { tm[5] = 'siren'; cn.siren = getCellText(mainSheet.getCell(`M${dr}`)); }
+                        const nVal = getCellText(mainSheet.getCell(`N${dr}`));
+                        if (nVal === 'геркон') { tm[6] = 'contact'; cn.contact = getCellText(mainSheet.getCell(`O${dr}`)); }
+                        const pVal = getCellText(mainSheet.getCell(`P${dr}`));
+                        if (pVal === 'кн.Вых') { tm[7] = 'exit_btn'; cn.exit_btn = getCellText(mainSheet.getCell(`Q${dr}`)); }
+                    }
+                    const rr = findRoomRow(dr || block.startRow);
+                    let room = '';
+                    if (rr) {
+                        const roomText = getCellText(mainSheet.getCell(`B${rr}`));
+                        if (roomText.startsWith('пом. ')) room = roomText.substring(5).trim();
+                    }
+                    return { terminalMap: tm, cableNumbers: cn, room };
+                }
+                const p1 = parsePlinth(inputBlock);
+                const p2 = outputBlock ? parsePlinth(outputBlock) : { terminalMap: {}, cableNumbers: {}, room: '' };
+                result.boards.push({
+                    type: 'SV005', rack: `ХК ${rackClean}`,
+                    skud1, skud2,
+                    plinth1: { number: plinth1Num, room: p1.room, terminalMap: p1.terminalMap, cableNumbers: p1.cableNumbers, cableMap: {}, roomMap: {}, device1Map: {}, device2Map: {}, count1Map: {}, count2Map: {} },
+                    plinth2: { number: plinth2Num, room: p2.room, terminalMap: p2.terminalMap, cableNumbers: p2.cableNumbers, cableMap: {}, roomMap: {}, device1Map: {}, device2Map: {}, count1Map: {}, count2Map: {} }
+                });
+            }
+        } else {
+            const blocks = getBlocksSV004(mainSheet);
+            if (blocks.length === 0) return res.status(400).json({ error: 'Не найдены блоки Стойка' });
+            for (let bi = 0; bi < blocks.length; bi += 2) {
+                const inputBlock = blocks[bi];
+                const outputBlock = (bi + 1 < blocks.length) ? blocks[bi + 1] : null;
+                const startRow = inputBlock.startRow;
+                const rackClean = String(mainSheet.getCell(`N${startRow}`).value ?? '');
+                if (!result.rack) result.rack = rackClean;
+                const boardNum = parseInt(mainSheet.getCell(`N${startRow + 2}`).value) || (bi / 2 + 1);
+                const plinth1Num = parseInt(mainSheet.getCell(`N${startRow + 4}`).value) || 0;
+                const plinth2Num = outputBlock ? (parseInt(mainSheet.getCell(`N${outputBlock.startRow + 4}`).value) || 0) : 0;
+                const skud1 = String(mainSheet.getCell(`N${startRow + 5}`).value ?? '').trim();
+                const skud2 = outputBlock ? String(mainSheet.getCell(`N${outputBlock.startRow + 5}`).value ?? '').trim() : '';
+                function parsePlinthSV004(block) {
+                    const devRow = block.startRow + 14;
+                    const roomRow = block.startRow + 15;
+                    const pins = [0, 1, 2, 3];
+                    const devCols = ['B', 'F', 'J', 'N'];
+                    const cableCols = ['D', 'H', 'L', 'P'];
+                    const roomDevCols = ['B', 'F', 'J', 'N'];
+                    const roomNumCols = ['D', 'H', 'L', 'P'];
+                    const cm = {}; const rm = {};
+                    const device1Map = {}; const device2Map = {}; const count1Map = {}; const count2Map = {};
+                    for (let i = 0; i < pins.length; i++) {
+                        const pin = pins[i];
+                        const device = getCellText(mainSheet.getCell(`${devCols[i]}${devRow}`));
+                        const cable = getCellText(mainSheet.getCell(`${cableCols[i]}${devRow}`));
+                        const roomDev = getCellText(mainSheet.getCell(`${roomDevCols[i]}${roomRow}`));
+                        const roomNum = getCellText(mainSheet.getCell(`${roomNumCols[i]}${roomRow}`));
+                        if (cable) cm[pin] = cable;
+                        if (roomDev === 'пом.' && roomNum) rm[pin] = roomNum;
+                        device1Map[pin] = device;
+                        device2Map[pin] = '';
+                        count1Map[pin] = 1;
+                        count2Map[pin] = 1;
+                    }
+                    const tm = {};
+                    for (let i = 0; i < pins.length; i++) {
+                        const pin = pins[i];
+                        const parts = [];
+                        if (device1Map[pin]) parts.push(`${device1Map[pin]} (${count1Map[pin] || 1})`);
+                        if (device2Map[pin]) parts.push(`${device2Map[pin]} (${count2Map[pin] || 1})`);
+                        tm[pin] = parts.join(', ');
+                    }
+                    return { terminalMap: tm, cableMap: cm, roomMap: rm, device1Map, device2Map, count1Map, count2Map };
+                }
+                const p1 = parsePlinthSV004(inputBlock);
+                const p2 = outputBlock ? parsePlinthSV004(outputBlock) : { terminalMap: {}, cableMap: {}, roomMap: {}, device1Map: {}, device2Map: {}, count1Map: {}, count2Map: {} };
+                result.boards.push({
+                    type: 'SV004', rack: `ХК ${rackClean}`,
+                    skud1, skud2,
+                    plinth1: { number: plinth1Num, room: '', terminalMap: p1.terminalMap, cableNumbers: {}, cableMap: p1.cableMap, roomMap: p1.roomMap, device1Map: p1.device1Map, device2Map: p1.device2Map, count1Map: p1.count1Map, count2Map: p1.count2Map },
+                    plinth2: { number: plinth2Num, room: '', terminalMap: p2.terminalMap, cableNumbers: {}, cableMap: p2.cableMap, roomMap: p2.roomMap, device1Map: p2.device1Map, device2Map: p2.device2Map, count1Map: p2.count1Map, count2Map: p2.count2Map }
+                });
+            }
+        }
+        res.json(result);
+    } catch (err) {
+        console.error('[import-xlsx] ошибка:', err.message);
+        try { fs.unlinkSync(tempPath); } catch (_) {}
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ---------- СКАЧИВАНИЕ ФАЙЛА ----------
 app.get('/api/projects/download/:fileName', async (req, res) => {
     const { fileName } = req.params;
