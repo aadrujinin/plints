@@ -880,6 +880,7 @@ function saveFileToNetwork(buffer, fileName, projectName) {
 app.post('/generate-sv005', async (req, res) => {
     try {
         const { address, globalModel, boards } = req.body;
+        console.log(`[SV005] Генерация: адрес="${address}", плат=${boards?.length || 0}`);
         if (!address || !boards || !boards.length) {
             return res.status(400).json({ error: 'Не указан адрес или список плат' });
         }
@@ -909,6 +910,8 @@ app.post('/generate-sv005', async (req, res) => {
 
         let inputBlocks = blocks.filter(b => b.type === 'input');
         let outputBlocks = blocks.filter(b => b.type === 'output');
+
+        console.log(`[SV005] Блоков: входных=${inputBlocks.length}, выходных=${outputBlocks.length}, нужно пар=${neededInput}`);
 
         while (inputBlocks.length < neededInput) {
             const lastInput = inputBlocks[inputBlocks.length - 1];
@@ -981,6 +984,7 @@ app.post('/generate-sv005', async (req, res) => {
             );
             board.plinth2.deviceLabel = plinth2Data.deviceLabel;
         }
+        console.log(`[SV005] Данные плат заполнены`);
 
         const allBlocks = getBlocksSV005(worksheet);
         const usedStartRows = new Set();
@@ -1006,17 +1010,19 @@ app.post('/generate-sv005', async (req, res) => {
         }
 
         createSheetsSV005(workbook, boards, globalModel);
+        console.log(`[SV005] Шпоргалки/Disp заполнены`);
 
         applyAutoFit(workbook);
 
         const buffer = await workbook.xlsx.writeBuffer();
 
         const addressPart = extractAddressPart(address);
-        const safeAddress = addressPart.replace(/[\\/:*?"<>|]/g, '_');
+        const safeAddress = addressPart.replace(/[\/\\:*?"<>|]/g, '_');
         const dateStr = new Date().toISOString().slice(0, 10);
         const filename = `${safeAddress}_${dateStr}_SV005.xlsx`;
 
         const filePath = saveFileToNetwork(buffer, filename, address);
+        console.log(`[SV005] Файл сохранён: ${filePath}`);
 
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
@@ -1037,6 +1043,7 @@ app.post('/generate-sv004', async (req, res) => {
         if (!fs.existsSync(TEMPLATE_SV004)) {
             return res.status(500).json({ error: 'Файл шаблона SV004 не найден.' });
         }
+        console.log(`[SV004] Генерация: адрес="${address}", плат=${boards.length}`);
 
         const workbook = new ExcelJS.Workbook();
         await workbook.xlsx.readFile(TEMPLATE_SV004);
@@ -1126,6 +1133,7 @@ app.post('/generate-sv004', async (req, res) => {
                 globalModel
             );
         }
+        console.log(`[SV004] Данные плат заполнены`);
 
         const usedStartRows = new Set();
         usedInputBlocks.forEach(b => usedStartRows.add(b.startRow));
@@ -1150,11 +1158,13 @@ app.post('/generate-sv004', async (req, res) => {
         }
 
         fillSheetsSV004(workbook, boards, globalModel);
+        console.log(`[SV004] Шпоргалки/Disp заполнены`);
 
         // Создаём общую шпоргалку
         createCommonCheatSheetSV004(workbook);
 
         applyAutoFit(workbook);
+        console.log(`[SV004] Автоподгон ширины завершён`);
 
         const buffer = await workbook.xlsx.writeBuffer();
 
@@ -1164,6 +1174,7 @@ app.post('/generate-sv004', async (req, res) => {
         const filename = `${safeAddress}_${dateStr}_SV004.xlsx`;
 
         const filePath = saveFileToNetwork(buffer, filename, address);
+        console.log(`[SV004] Файл сохранён: ${filePath}`);
 
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
