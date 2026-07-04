@@ -5,6 +5,14 @@ const path = require('path');
 const fs = require('fs');
 const { Pool } = require('pg');
 
+const generationLogs = [];
+function addLog(msg) {
+    const entry = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    generationLogs.push(entry);
+    console.log(msg);
+    if (generationLogs.length > 200) generationLogs.splice(0, 50);
+}
+
 const app = express();
 const PORT = 3000;
 
@@ -880,7 +888,7 @@ function saveFileToNetwork(buffer, fileName, projectName) {
 app.post('/generate-sv005', async (req, res) => {
     try {
         const { address, globalModel, boards } = req.body;
-        console.log(`[SV005] Генерация: адрес="${address}", плат=${boards?.length || 0}`);
+        addLog(`[SV005] Генерация: адрес="${address}", плат=${boards?.length || 0}`);
         if (!address || !boards || !boards.length) {
             return res.status(400).json({ error: 'Не указан адрес или список плат' });
         }
@@ -911,7 +919,7 @@ app.post('/generate-sv005', async (req, res) => {
         let inputBlocks = blocks.filter(b => b.type === 'input');
         let outputBlocks = blocks.filter(b => b.type === 'output');
 
-        console.log(`[SV005] Блоков: входных=${inputBlocks.length}, выходных=${outputBlocks.length}, нужно пар=${neededInput}`);
+        addLog(`[SV005] Блоков: входных=${inputBlocks.length}, выходных=${outputBlocks.length}, нужно пар=${neededInput}`);
 
         while (inputBlocks.length < neededInput) {
             const lastInput = inputBlocks[inputBlocks.length - 1];
@@ -984,7 +992,7 @@ app.post('/generate-sv005', async (req, res) => {
             );
             board.plinth2.deviceLabel = plinth2Data.deviceLabel;
         }
-        console.log(`[SV005] Данные плат заполнены`);
+        addLog(`[SV005] Данные плат заполнены`);
 
         const allBlocks = getBlocksSV005(worksheet);
         const usedStartRows = new Set();
@@ -1010,7 +1018,7 @@ app.post('/generate-sv005', async (req, res) => {
         }
 
         createSheetsSV005(workbook, boards, globalModel);
-        console.log(`[SV005] Шпоргалки/Disp заполнены`);
+        addLog(`[SV005] Шпоргалки/Disp заполнены`);
 
         applyAutoFit(workbook);
 
@@ -1022,7 +1030,7 @@ app.post('/generate-sv005', async (req, res) => {
         const filename = `${safeAddress}_${dateStr}_SV005.xlsx`;
 
         const filePath = saveFileToNetwork(buffer, filename, address);
-        console.log(`[SV005] Файл сохранён: ${filePath}`);
+        addLog(`[SV005] Файл сохранён: ${filePath}`);
 
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
@@ -1043,7 +1051,7 @@ app.post('/generate-sv004', async (req, res) => {
         if (!fs.existsSync(TEMPLATE_SV004)) {
             return res.status(500).json({ error: 'Файл шаблона SV004 не найден.' });
         }
-        console.log(`[SV004] Генерация: адрес="${address}", плат=${boards.length}`);
+        addLog(`[SV004] Генерация: адрес="${address}", плат=${boards.length}`);
 
         const workbook = new ExcelJS.Workbook();
         await workbook.xlsx.readFile(TEMPLATE_SV004);
@@ -1133,7 +1141,7 @@ app.post('/generate-sv004', async (req, res) => {
                 globalModel
             );
         }
-        console.log(`[SV004] Данные плат заполнены`);
+        addLog(`[SV004] Данные плат заполнены`);
 
         const usedStartRows = new Set();
         usedInputBlocks.forEach(b => usedStartRows.add(b.startRow));
@@ -1158,13 +1166,13 @@ app.post('/generate-sv004', async (req, res) => {
         }
 
         fillSheetsSV004(workbook, boards, globalModel);
-        console.log(`[SV004] Шпоргалки/Disp заполнены`);
+        addLog(`[SV004] Шпоргалки/Disp заполнены`);
 
         // Создаём общую шпоргалку
         createCommonCheatSheetSV004(workbook);
 
         applyAutoFit(workbook);
-        console.log(`[SV004] Автоподгон ширины завершён`);
+        addLog(`[SV004] Автоподгон ширины завершён`);
 
         const buffer = await workbook.xlsx.writeBuffer();
 
@@ -1174,7 +1182,7 @@ app.post('/generate-sv004', async (req, res) => {
         const filename = `${safeAddress}_${dateStr}_SV004.xlsx`;
 
         const filePath = saveFileToNetwork(buffer, filename, address);
-        console.log(`[SV004] Файл сохранён: ${filePath}`);
+        addLog(`[SV004] Файл сохранён: ${filePath}`);
 
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
@@ -1184,6 +1192,12 @@ app.post('/generate-sv004', async (req, res) => {
         console.error(err);
         res.status(500).json({ error: 'Ошибка генерации SV004: ' + err.message });
     }
+});
+
+// ---------- ЛОГИ ГЕНЕРАЦИИ ----------
+app.get('/api/generation-logs', (req, res) => {
+    const from = parseInt(req.query.from, 10) || 0;
+    res.json({ logs: generationLogs.slice(from), total: generationLogs.length });
 });
 
 // ---------- СИНХРОНИЗАЦИЯ С SSE ----------
@@ -1248,7 +1262,8 @@ app.get('/api/projects/sync-stream', async (req, res) => {
             await client.query('BEGIN');
             for (const project of allProjects) {
                 const { id, name, is_archive } = project;
-                const isArchiveBool = (is_archive === 1 || is_archive === true);
+                const notArchived = [false, 0, '0', 'false'];
+                const isArchiveBool = !notArchived.includes(is_archive);
                 let cf_92 = null;
                 let cf_217 = null;
                 try {
@@ -1336,7 +1351,8 @@ app.post('/api/projects/sync', async (req, res) => {
             await client.query('BEGIN');
             for (const project of allProjects) {
                 const { id, name, is_archive } = project;
-                const isArchiveBool = (is_archive === 1 || is_archive === true);
+                const notArchived = [false, 0, '0', 'false'];
+                const isArchiveBool = !notArchived.includes(is_archive);
                 let cf_92 = null;
                 let cf_217 = null;
                 try {
@@ -1561,10 +1577,14 @@ app.get('/api/projects/search', async (req, res) => {
         let filteredBySearch = allProjects.filter(p => p.name && p.name.toLowerCase().includes(lowerSearch));
         const totalBeforeArchive = filteredBySearch.length;
 
+        function isProjectArchived(p) {
+            const notArchived = [false, 0, '0', 'false'];
+            return !notArchived.includes(p && p.is_archive);
+        }
         let filteredByArchive = filteredBySearch;
         let archivedCount = 0;
         if (showArchived !== 'true') {
-            filteredByArchive = filteredBySearch.filter(p => !p.is_archive);
+            filteredByArchive = filteredBySearch.filter(p => !isProjectArchived(p));
             archivedCount = totalBeforeArchive - filteredByArchive.length;
         }
 

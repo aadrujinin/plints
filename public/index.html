@@ -748,7 +748,10 @@
 </head>
 <body>
 <div class="container">
-    <h1>🔌 Редактор плат SV005 / SV004 (ручное назначение)</h1>
+    <div style="display:flex; align-items:center; gap:16px; margin-bottom:10px; border-bottom:2px solid #bdd4e7; padding-bottom:8px;">
+        <h1 style="margin:0; padding:0; border:none;">🔌 Редактор плат SV005 / SV004 (ручное назначение)</h1>
+        <span id="logStatus" style="font-size:0.75rem; color:#4b5563; background:#f3f4f6; padding:2px 12px; border-radius:30px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:400px;"></span>
+    </div>
 
     <!-- Строка адреса с чекбоксом справа -->
     <div class="address-row">
@@ -1701,10 +1704,14 @@
             filtered = filtered.filter(p => p.name && p.name.toLowerCase().includes(searchText));
         }
 
+        function isArchived(p) {
+            const notArchived = [false, 0, '0', 'false'];
+            return !notArchived.includes(p && p.is_archive);
+        }
         if (archiveFilter === 'active') {
-            filtered = filtered.filter(p => !p.is_archive);
+            filtered = filtered.filter(p => !isArchived(p));
         } else if (archiveFilter === 'archived') {
-            filtered = filtered.filter(p => p.is_archive);
+            filtered = filtered.filter(p => isArchived(p));
         }
 
         const grouped = {};
@@ -1713,7 +1720,7 @@
                 grouped[p.name] = {
                     name: p.name,
                     files: [],
-                    is_archive: p.is_archive,
+                    is_archive: isArchived(p),
                     expanded_downloaded: false,
                     cf_92: null,
                     cf_217: null
@@ -1759,7 +1766,7 @@
             const group = grouped[name];
             const statusClass = group.expanded_downloaded ? 'status-downloaded' : 'status-not-downloaded';
             const statusText = group.expanded_downloaded ? '✅ Выгружены' : '❌ Не выгружены';
-            const archiveText = group.is_archive ? 'Да' : 'Нет';
+            const archiveText = isArchived(group) ? 'Да' : 'Нет';
             const cfLink = group.cf_92 ? `<a href="${escapeHtml(group.cf_92)}" target="_blank" class="cf-link" title="${escapeHtml(group.cf_92)}">${escapeHtml(group.cf_92)}</a>` : '—';
             const ncLink = group.cf_217 ? `<a href="${escapeHtml(group.cf_217)}" target="_blank" class="cf-link" title="${escapeHtml(group.cf_217)}">${escapeHtml(group.cf_217)}</a>` : '—';
 
@@ -1880,7 +1887,26 @@
             }
         }
 
-        showMessage('Генерация файла...', 'info');
+        const logStatus = document.getElementById('logStatus');
+        logStatus.textContent = `⏳ Генерация ${targetType}...`;
+        showMessage(`Генерация ${targetType}...`, 'info');
+
+        let pollTimer;
+        let pollCount = 0;
+        function pollLogs() {
+            fetch('/api/generation-logs?_=' + Date.now())
+                .then(r => r.json())
+                .then(d => {
+                    if (d.logs.length > 0) {
+                        const last = d.logs[d.logs.length - 1];
+                        logStatus.textContent = last;
+                        document.getElementById('message').innerHTML = `<div class="info">🔄 ${last}</div>`;
+                    }
+                })
+                .catch(() => {});
+        }
+        pollTimer = setInterval(pollLogs, 800);
+
         try {
             const response = await fetch(endpoint, {
                 method: 'POST',
@@ -1946,6 +1972,8 @@
                 }
             }
 
+            clearInterval(pollTimer);
+            logStatus.textContent = `✅ ${targetType} готов`;
             const projectEntry = {
                 name: data.address,
                 fileName: filename,
@@ -1955,6 +1983,8 @@
 
             showMessage(`✅ Файл для ${targetType} успешно сгенерирован! Нажмите "Записать в БД" для сохранения статуса.`, 'success');
         } catch (err) {
+            clearInterval(pollTimer);
+            logStatus.textContent = `❌ Ошибка: ${err.message}`;
             showMessage(`Ошибка: ${err.message}`, 'error');
         }
     }
