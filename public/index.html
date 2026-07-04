@@ -638,6 +638,63 @@
         .filter-panel select {
             min-width: 140px;
         }
+        .add-file-btn {
+            background: #1e7e34;
+            border: none;
+            color: white;
+            padding: 6px 14px;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            white-space: nowrap;
+        }
+        .add-file-btn:hover {
+            background: #145a24;
+        }
+        .add-file-form {
+            display: flex;
+            gap: 8px;
+            padding: 10px 0;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .add-file-form input[type="text"] {
+            padding: 6px 12px;
+            border-radius: 14px;
+            border: 1px solid #cbd5e1;
+            font-size: 0.85rem;
+            flex: 1;
+            min-width: 150px;
+        }
+        .add-file-form input[type="file"] {
+            font-size: 0.85rem;
+            flex: 1;
+            min-width: 180px;
+        }
+        .add-file-submit {
+            background: #1e7e34;
+            border: none;
+            color: white;
+            padding: 6px 14px;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .add-file-submit:hover {
+            background: #145a24;
+        }
+        .add-file-cancel {
+            background: #6b7280;
+            border: none;
+            color: white;
+            padding: 6px 14px;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .add-file-cancel:hover {
+            background: #4b5563;
+        }
 
         .projects-stats {
             padding: 8px 12px;
@@ -857,6 +914,13 @@
                     <option value="active" selected>Не архивные</option>
                     <option value="archived">Архивные</option>
                 </select>
+                <button id="addFileBtn" class="add-file-btn">➕ Файл</button>
+            </div>
+            <div id="addFileForm" class="add-file-form" style="display:none;">
+                <input type="text" id="addFileName" placeholder="Название проекта" />
+                <input type="file" id="addFileFileInput" />
+                <button id="addFileSubmit" class="add-file-submit">✅ Добавить</button>
+                <button id="addFileCancel" class="add-file-cancel">✕ Отмена</button>
             </div>
             <div id="projectsListContainer">
                 <p>Загрузка...</p>
@@ -2157,6 +2221,76 @@
     document.getElementById('projectsModal').addEventListener('click', function(e) {
         if (e.target === this) {
             this.classList.remove('active');
+        }
+    });
+
+    // Добавление файла в проект вручную
+    document.getElementById('addFileBtn').addEventListener('click', () => {
+        const form = document.getElementById('addFileForm');
+        form.style.display = form.style.display === 'none' ? 'flex' : 'none';
+    });
+    document.getElementById('addFileCancel').addEventListener('click', () => {
+        document.getElementById('addFileForm').style.display = 'none';
+    });
+    document.getElementById('addFileSubmit').addEventListener('click', async () => {
+        const name = document.getElementById('addFileName').value.trim();
+        const fileInput = document.getElementById('addFileFileInput');
+        if (!name) {
+            showMessage('Введите название проекта', 'error');
+            return;
+        }
+        if (!fileInput.files || fileInput.files.length === 0) {
+            showMessage('Выберите файл', 'error');
+            return;
+        }
+        const btn = document.getElementById('addFileSubmit');
+        btn.disabled = true;
+        btn.textContent = '⏳';
+        try {
+            const formData = new FormData();
+            formData.append('name', name);
+            formData.append('file', fileInput.files[0]);
+            const res = await fetch('/api/projects/add-file', {
+                method: 'POST',
+                body: formData
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.error || 'Ошибка');
+            }
+            const data = await res.json();
+            if (data.needsConfirm) {
+                const createFolder = confirm(
+                    `Сетевая папка для проекта "${name}" не найдена.\n\n` +
+                    `${data.networkFolder}\n\nСоздать папку и сохранить файл туда?`
+                );
+                const confirmRes = await fetch('/api/projects/add-file-confirm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pendingId: data.pendingId, createFolder })
+                });
+                if (!confirmRes.ok) {
+                    const err = await confirmRes.json();
+                    throw new Error(err.error || 'Ошибка подтверждения');
+                }
+                const confirmData = await confirmRes.json();
+                if (confirmData.success) {
+                    showMessage(`✅ Файл "${fileInput.files[0].name}" добавлен к проекту "${name}"`, 'success');
+                } else {
+                    showMessage(`❌ Файл не добавлен`, 'error');
+                }
+            } else {
+                showMessage(`✅ Файл "${fileInput.files[0].name}" добавлен к проекту "${name}"`, 'success');
+            }
+            document.getElementById('addFileForm').style.display = 'none';
+            document.getElementById('addFileName').value = '';
+            fileInput.value = '';
+            showProjectsFromDb();
+        } catch (error) {
+            showMessage(`❌ ${error.message}`, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '✅ Добавить';
         }
     });
 

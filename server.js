@@ -3,6 +3,7 @@ const express = require('express');
 const ExcelJS = require('exceljs');
 const path = require('path');
 const fs = require('fs');
+const multer = require('multer');
 const { Pool } = require('pg');
 
 const generationLogs = [];
@@ -21,6 +22,21 @@ app.use(express.static('public'));
 
 const TEMPLATE_SV005 = path.join(__dirname, 'templateSV005_test.xlsx');
 const TEMPLATE_SV004 = path.join(__dirname, 'templateSV004_test.xlsx');
+
+// ---------- Загрузка файлов (multer) ----------
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, UPLOADS_DIR),
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const decodedName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+        cb(null, uniqueSuffix + '-' + decodedName);
+    }
+});
+const upload = multer({ storage });
 
 // ---------- Проверка переменных окружения ----------
 if (!process.env.API_KEY || !process.env.API_BASE_URL) {
@@ -1470,6 +1486,93 @@ app.get('/api/projects', async (req, res) => {
     } catch (error) {
         console.error('Ошибка получения проектов:', error);
         res.status(500).json({ error: error.message });
+    }
+});
+
+// ---------- ХРАНИЛИЩЕ ОЖИДАЮЩИХ ФАЙЛОВ ----------
+const pendingFileUploads = new Map();
+
+// ---------- ДОБАВЛЕНИЕ ФАЙЛА В ПРОЕКТ ----------
+app.post('/api/projects/add-file', upload.single('file'), async (req, res) => {
+    const { name } = req.body;
+    if (!name) {
+        return res.status(400).json({ error: 'Не указано название проекта' });
+    }
+    if (!req.file) {
+        return res.status(400).json({ error: 'Файл не выбран' });
+    }
+    const file_name = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
+    const tempPath = req.file.path;
+
+    try {
+        const basePath = process.env.BASE_NETWORK_PATH || '//fileserver/!_Work/for Druzhinin Anton/vhd';
+        const safeName = name.replace(/[\\/:*?"<>|]/g, '_');
+        const networkFolder = path.join(
+            basePath,
+            '1.Техническая документация',
+            '1.2.Проект',
+            '1.2.3.Расшивки',
+            safeName
+        );
+        if (fs.existsSync(networkFolder)) {
+            const networkFilePath = path.join(networkFolder, file_name);
+            fs.copyFileSync(tempPath, networkFilePath);
+            try { fs.unlinkSync(tempPath); } catch (_) {}
+            console.log(`[add-file] скопирован в сетевую папку: ${networkFilePath}`);
+            const pendingId = -Date.now() - Math.floor(Math.random() * 1000);
+            await pool.query(
+                'INSERT INTO projects (id, name, is_archive, expanded_downloaded, file_name, file_path) VALUES ($1, $2, $3, $4, $5, $6)',
+                [pendingId, name, false, false, file_name, networkFilePath]
+            );
+            console.log(`[БД] INSERT manual file: name="${name}", file="${file_name}"`);
+            return res.json({ success: true, id: pendingId });
+        }
+        // Папки нет — запрашиваем подтверждение
+        const pendingId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        pendingFileUploads.set(pendingId, { name, file_name, tempPath, networkFolder, safeName });
+        setTimeout(() => { pendingFileUploads.delete(pendingId); }, 120000);
+        console.log(`[add-file] папки нет, запрос подтверждения: ${pendingId}`);
+        res.json({ needsConfirm: true, pendingId, name, file_name, networkFolder });
+    } catch (err) {
+        console.error('[add-file] ошибка:', err.message);
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ---------- ПОДТВЕРЖДЕНИЕ СОЗДАНИЯ ПАПКИ ----------
+app.post('/api/projects/add-file-confirm', async (req, res) => {
+    const { pendingId, createFolder } = req.body;
+    const pending = pendingFileUploads.get(pendingId);
+    if (!pending) {
+        return res.status(404).json({ error: 'Запрос устарел или не найден' });
+    }
+    pendingFileUploads.delete(pendingId);
+    const { name, file_name, tempPath, networkFolder } = pending;
+
+    try {
+        if (createFolder) {
+            fs.mkdirSync(networkFolder, { recursive: true });
+            const networkFilePath = path.join(networkFolder, file_name);
+            fs.copyFileSync(tempPath, networkFilePath);
+            try { fs.unlinkSync(tempPath); } catch (_) {}
+            console.log(`[add-file] папка создана, файл скопирован: ${networkFilePath}`);
+            const tempId = -Date.now() - Math.floor(Math.random() * 1000);
+            await pool.query(
+                'INSERT INTO projects (id, name, is_archive, expanded_downloaded, file_name, file_path) VALUES ($1, $2, $3, $4, $5, $6)',
+                [tempId, name, false, false, file_name, networkFilePath]
+            );
+            console.log(`[БД] INSERT manual file: name="${name}", file="${file_name}"`);
+            return res.json({ success: true, id: tempId });
+        }
+        // Отказ — сохраняем в uploads
+        try { fs.unlinkSync(tempPath); } catch (_) {}
+        console.log(`[add-file] пользователь отказался, файл удалён: ${tempPath}`);
+        res.json({ success: false, message: 'Файл не добавлен' });
+    } catch (err) {
+        console.error('[add-file-confirm] ошибка:', err.message);
+        try { fs.unlinkSync(tempPath); } catch (_) {}
+        res.status(500).json({ error: err.message });
     }
 });
 
