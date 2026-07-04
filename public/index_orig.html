@@ -658,9 +658,6 @@
             flex-wrap: wrap;
             align-items: center;
         }
-        .stage-label { display:inline-flex; align-items:center; gap:3px; background:#f0f4f8; padding:4px 10px; border-radius:14px; cursor:pointer; font-size:0.9rem; user-select:none; }
-        .stage-label:hover { background:#e2e8f0; }
-        .stage-label input { margin:0; }
         .add-file-form input[type="text"] {
             padding: 6px 12px;
             border-radius: 14px;
@@ -863,16 +860,15 @@
         <button type="button" id="fillTestBtn" class="btn-secondary">🧪 Тест</button>
         <button type="button" id="importXlsxBtn" class="btn-secondary">📥 Импорт xlsx</button>
         <input type="file" id="importXlsxInput" accept=".xlsx" style="display:none">
+        <button type="button" id="checkBoardsBtn" class="btn-secondary">🔍 Проверить платы</button>
+        <button type="button" id="applyGlobalRoomBtn" class="btn-secondary">🏠 Применить ко всем</button>
         <button type="button" id="deleteAllBoardsBtn" class="btn-danger">🗑 Удалить все платы</button>
         <button type="button" id="toggleAllBoardsBtn" class="btn-secondary">📂 Развернуть/свернуть все</button>
         <button type="button" id="syncProjectsBtn" class="btn-secondary">🔄 Синхронизировать проекты</button>
         <button type="button" id="updateDbBtn" class="btn-success">💾 Записать в БД</button>
         <button type="button" id="showProjectsBtn" class="btn-secondary">📋 Проекты БД</button>
-        <button type="button" id="showTasksBtn" class="btn-secondary">📋 Задачи</button>
-        <div style="display:inline-flex;gap:6px;flex-wrap:wrap;">
-            <button type="button" id="submitExcelTopBtn" class="btn-submit">📎 Excel SV005</button>
-            <button type="button" id="submitExcelTopBtnSV004" class="btn-submit btn-submit-sv004">📎 Excel SV004</button>
-        </div>
+        <button type="button" id="submitExcelTopBtn" class="btn-submit">📎 Excel SV005</button>
+        <button type="button" id="submitExcelTopBtnSV004" class="btn-submit btn-submit-sv004">📎 Excel SV004</button>
         <div id="boardCounters">
             <span>SV005: <strong id="count005">0</strong></span>
             <span>SV004: <strong id="count004">0</strong></span>
@@ -882,21 +878,18 @@
 
     <div id="boardsContainer"></div>
 
-    <div class="toolbar-bottom" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:10px;">
-        <div style="display:flex; gap:6px; align-items:center;">
-            <div class="field" style="margin:0;">
-                <label>Тип платы</label>
-                <select id="boardTypeBottom" class="board-type-select">
-                    <option value="SV005">SV005</option>
-                    <option value="SV004">SV004</option>
-                </select>
-            </div>
-            <button type="button" id="addBoardBtnBottom" class="btn-secondary">➕ Плата</button>
+    <!-- Нижняя панель управления -->
+    <div class="toolbar-bottom">
+        <div class="field">
+            <label>Тип платы</label>
+            <select id="boardTypeBottom" class="board-type-select">
+                <option value="SV005">SV005</option>
+                <option value="SV004">SV004</option>
+            </select>
         </div>
-        <div style="display:flex; gap:6px;">
-            <button type="button" id="submitExcelBtnBottom" class="btn-submit">📎 Excel SV005</button>
-            <button type="button" id="submitExcelBtnBottomSV004" class="btn-submit btn-submit-sv004">📎 Excel SV004</button>
-        </div>
+        <button type="button" id="addBoardBtnBottom" class="btn-secondary">➕ Плата</button>
+        <button type="button" id="submitExcelBtnBottom" class="btn-submit">📎 Excel SV005</button>
+        <button type="button" id="submitExcelBtnBottomSV004" class="btn-submit btn-submit-sv004">📎 Excel SV004</button>
     </div>
 
     <div id="message"></div>
@@ -933,39 +926,6 @@
             </div>
             <div id="projectsListContainer">
                 <p>Загрузка...</p>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Модальное окно для задач Aspro -->
-<div class="modal-overlay" id="tasksModal">
-    <div class="modal-content" style="max-width:1600px;">
-        <div class="modal-header">
-            <h2>📋 Задачи (Расшивки созданы)</h2>
-            <button class="modal-close" id="closeTasksModal">✕ Закрыть</button>
-        </div>
-        <div class="modal-body" id="tasksModalBody">
-            <div class="filter-panel" style="margin-bottom:10px;flex-wrap:wrap;gap:6px;">
-                <span style="font-weight:600;margin-right:4px;">Этапы:</span>
-                <label class="stage-label"><input type="checkbox" class="stage-filter" value="1" checked> Сделать</label>
-                <label class="stage-label"><input type="checkbox" class="stage-filter" value="2" checked> В работе</label>
-                <label class="stage-label"><input type="checkbox" class="stage-filter" value="3" checked> Проблема</label>
-                <label class="stage-label"><input type="checkbox" class="stage-filter" value="4" checked> Сделано</label>
-                <label class="stage-label"><input type="checkbox" class="stage-filter" value="5" checked> Завершено</label>
-                <button type="button" id="refreshTasksBtn" class="btn-secondary" style="margin-left:4px;">🔄 Обновить</button>
-            </div>
-            <div id="tasksProgress" style="display:none;margin-bottom:8px;">
-                <div style="display:flex;justify-content:space-between;font-size:0.85rem;color:#555;margin-bottom:2px;">
-                    <span id="tasksProgressText">Загрузка...</span>
-                    <span id="tasksProgressCount"></span>
-                </div>
-                <div style="width:100%;height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;">
-                    <div id="tasksProgressBar" style="width:0%;height:100%;background:#1e4663;border-radius:4px;transition:width 0.3s;"></div>
-                </div>
-            </div>
-            <div id="tasksListContainer">
-                <p>Нажмите "Обновить" для загрузки задач</p>
             </div>
         </div>
     </div>
@@ -1017,8 +977,8 @@
     let allProjectsData = [];
 
     function escapeHtml(str) {
-        if (str === null || str === undefined) return '';
-        return String(str).replace(/[&<>]/g, m => (m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;'));
+        if (!str) return '';
+        return str.replace(/[&<>]/g, m => (m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;'));
     }
 
     // ---------- Вспомогательные функции ----------
@@ -1618,6 +1578,28 @@
             });
         });
         showMessage('Тестовые данные заполнены', 'success');
+    }
+
+    function applyGlobalRoom() {
+        const globalRoom = document.getElementById('globalRoom');
+        if (!globalRoom) {
+            showMessage('Поле "Помещение (общее)" удалено. Используйте ручной ввод.', 'error');
+            return;
+        }
+        const roomValue = globalRoom.value.trim();
+        if (!roomValue) {
+            showMessage('Введите номер помещения', 'error');
+            return;
+        }
+        const boards = document.querySelectorAll('.board-card');
+        boards.forEach(board => {
+            const plinths = board.querySelectorAll('.plinth-card');
+            plinths.forEach(plinth => {
+                const roomInput = plinth.querySelector('.room-number');
+                if (roomInput) roomInput.value = roomValue;
+            });
+        });
+        showMessage(`Помещение "${roomValue}" применено ко всем плинтам`, 'success');
     }
 
     // ---------- Удаление всех плат ----------
@@ -2241,6 +2223,7 @@
             showMessage(`❌ ${err.message}`, 'error');
         }
     });
+    document.getElementById('applyGlobalRoomBtn').addEventListener('click', applyGlobalRoom);
     document.getElementById('deleteAllBoardsBtn').addEventListener('click', deleteAllBoards);
     document.getElementById('toggleAllBoardsBtn').addEventListener('click', toggleAllBoards);
     document.getElementById('syncProjectsBtn').addEventListener('click', syncProjects);
@@ -2249,6 +2232,12 @@
 
     document.getElementById('submitExcelTopBtn').addEventListener('click', () => submitExcel('/generate-sv005'));
     document.getElementById('submitExcelTopBtnSV004').addEventListener('click', () => submitExcel('/generate-sv004'));
+    document.getElementById('checkBoardsBtn').addEventListener('click', function() {
+        const data = collectData();
+        const types = data.boards.map(b => b.type).join(', ');
+        showMessage(`Найдено плат: ${data.boards.length} (типы: ${types || 'нет'})`, 'success');
+    });
+
     // Нижняя панель
     document.getElementById('addBoardBtnBottom').addEventListener('click', () => {
         const container = document.getElementById('boardsContainer');
@@ -2266,112 +2255,6 @@
         document.getElementById('projectsModal').classList.remove('active');
     });
     document.getElementById('projectsModal').addEventListener('click', function(e) {
-        if (e.target === this) {
-            this.classList.remove('active');
-        }
-    });
-
-    // ---------- ЗАДАЧИ ASPRO ----------
-    function loadTasks() {
-        const modal = document.getElementById('tasksModal');
-        if (!modal.classList.contains('active')) modal.classList.add('active');
-        const container = document.getElementById('tasksListContainer');
-        const progress = document.getElementById('tasksProgress');
-        const progressBar = document.getElementById('tasksProgressBar');
-        const progressText = document.getElementById('tasksProgressText');
-        const progressCount = document.getElementById('tasksProgressCount');
-
-        container.innerHTML = '';
-        progress.style.display = 'block';
-        progressBar.style.width = '0%';
-        progressText.textContent = 'Подготовка...';
-        progressCount.textContent = '';
-
-        const checks = document.querySelectorAll('.stage-filter:checked');
-        const statuses = Array.from(checks).map(c => c.value);
-        let url = `/api/aspro/tasks?search=${encodeURIComponent('Расшивки')}`;
-        statuses.forEach(s => { url += `&status=${s}`; });
-
-        (async () => {
-            progressBar.style.width = '30%';
-            progressText.textContent = 'Загрузка задач...';
-            try {
-                const response = await fetch(url);
-                progressBar.style.width = '60%';
-                progressText.textContent = 'Обработка...';
-                if (!response.ok) {
-                    const errData = await response.json().catch(() => ({}));
-                    throw new Error(errData.error || `Ошибка ${response.status}`);
-                }
-                const data = await response.json();
-                progressBar.style.width = '90%';
-                progressText.textContent = 'Фильтрация...';
-                if (!data.items || data.items.length === 0) {
-                    progress.style.display = 'none';
-                    container.innerHTML = '<p>Нет задач по выбранным фильтрам</p>';
-                    return;
-                }
-                progressBar.style.width = '100%';
-                progressText.textContent = 'Готово';
-                progressCount.textContent = `${data.total} задач`;
-                const statusMap = {1:'Сделать',2:'В работе',3:'Проблема',4:'Сделано',5:'Завершено'};
-                let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-weight:600;"><span>Найдено задач: ${data.total}</span><span style="color:#888;font-size:0.85rem;">Всего в API: ${data.rawTotal || '?'}</span></div>`;
-                html += `<table class="projects-table" style="width:100%;">
-                    <thead>
-                        <tr>
-                            <th style="text-align:left;">Задача</th>
-                            <th style="text-align:left;">Проект</th>
-                            <th style="text-align:left;">ID проекта</th>
-                            <th style="text-align:left;">Дата начала</th>
-                            <th style="text-align:left;">Дата окончания</th>
-                            <th style="text-align:left;">Статус</th>
-                        </tr>
-                    </thead>
-                    <tbody>`;
-                data.items.forEach(task => {
-                    const taskName = task.name || 'Без названия';
-                    const projectName = task._project_name || '';
-                    const modelId = task._model_id || task.model_id;
-                    const taskLink = `https://inteko.aspro.cloud/_module/task/view/task/${task.id}`;
-                    const projectLink = modelId ? `https://inteko.aspro.cloud/_module/st/view/project/${modelId}?tab=project_info` : '';
-                    const startDate = task.plan_start_date ? new Date(task.plan_start_date).toLocaleDateString('ru-RU') : '—';
-                    const endDate = task.plan_end_date ? new Date(task.plan_end_date).toLocaleDateString('ru-RU') : '—';
-                    const statusDisplay = statusMap[task.status] || `Этап ${task.status}`;
-                    let projCell;
-                    if (projectLink) {
-                        projCell = `<a href="${projectLink}" target="_blank" style="color:#1e4663;text-decoration:underline;">${escapeHtml(projectName || projectLink)}</a>`;
-                    } else {
-                        projCell = escapeHtml(projectName) || `<span style="color:#999;">—</span>`;
-                    }
-                    html += `<tr>
-                        <td><a href="${taskLink}" target="_blank" style="color:#1e4663;text-decoration:underline;">${escapeHtml(taskName)}</a></td>
-                        <td>${projCell}</td>
-                        <td style="color:#888;font-size:0.85rem;">${modelId || '—'}</td>
-                        <td>${startDate}</td>
-                        <td>${endDate}</td>
-                        <td><span class="status-badge status-downloaded">${statusDisplay}</span></td>
-                    </tr>`;
-                });
-                html += `</tbody></table>`;
-                html += `<div style="margin-top:8px;font-weight:600;text-align:right;">Найдено задач: ${data.total}</div>`;
-                container.innerHTML = html;
-            } catch (err) {
-                progress.style.display = 'none';
-                container.innerHTML = `<p style="color:red;">❌ ${err.message}</p>`;
-            }
-        })();
-    }
-
-    document.getElementById('showTasksBtn').addEventListener('click', function() {
-        document.getElementById('tasksModal').classList.add('active');
-        document.getElementById('tasksListContainer').innerHTML = '<p>Выберите этапы и нажмите "Обновить"</p>';
-    });
-    document.getElementById('refreshTasksBtn').addEventListener('click', loadTasks);
-
-    document.getElementById('closeTasksModal').addEventListener('click', function() {
-        document.getElementById('tasksModal').classList.remove('active');
-    });
-    document.getElementById('tasksModal').addEventListener('click', function(e) {
         if (e.target === this) {
             this.classList.remove('active');
         }

@@ -1589,14 +1589,14 @@ app.post('/api/import-xlsx', upload.single('file'), async (req, res) => {
         const isSV004 = sheetNames.some(n => n.includes('SV004') || n.startsWith('шпоргалка-') || n.startsWith('Disp-'));
         const isSV005 = !isSV004 && (sheetNames.some(n => n === 'Лист1' || n === 'шпоргалка' || n === 'Шпора общая'));
 
+        const origName = req.file.originalname || '';
+        const addrMatch = origName.match(/^(.+?)_(20\d{2})/);
+        if (addrMatch) result.address = addrMatch[1].replace(/_/g, ' ').trim();
+
         const mainSheet = workbook.worksheets[0];
         if (!mainSheet) return res.status(400).json({ error: 'Нет листов в книге' });
 
         const result = { type: isSV004 ? 'SV004' : 'SV005', address: '', rack: '', boards: [] };
-
-        const origName = req.file.originalname || '';
-        const addrMatch = origName.match(/^(.+?)_(20\d{2})/);
-        if (addrMatch) result.address = addrMatch[1].replace(/_/g, ' ').trim();
 
         if (isSV005) {
             const blocks = getBlocksSV005(mainSheet);
@@ -1867,24 +1867,16 @@ app.get('/api/projects/search', async (req, res) => {
 app.get('/api/aspro/tasks', async (req, res) => {
     const apiKey = process.env.API_KEY;
     if (!apiKey) return res.status(500).json({ error: 'API_KEY не задан в .env' });
-    const { search, status } = req.query;
     try {
         const allItems = [];
         let page = 1;
         const perPage = 50;
         let total = 0;
 
-        let baseUrl = `https://inteko.aspro.cloud/api/v1/module/task/tasks/list?api_key=${apiKey}&customfields=1&per_page=${perPage}&filter[archive_status]=0`;
-        if (search) baseUrl += `&q=${encodeURIComponent(search)}`;
-
-        let statusFilterStr = '';
-        if (status) {
-            const statusArr = Array.isArray(status) ? status : [status];
-            statusArr.forEach(s => { statusFilterStr += `&filter[status][]=${encodeURIComponent(s)}`; });
-        }
-
+        console.log('[aspro-tasks] Начинаем загрузку задач...');
         while (true) {
-            const url = `${baseUrl}&page=${page}${statusFilterStr}`;
+            const url = `https://inteko.aspro.cloud/api/v1/module/task/tasks/list?api_key=${apiKey}&page=${page}&per_page=${perPage}&customfields=1`;
+            console.log(`[aspro-tasks] Страница ${page}...`);
             const response = await fetch(url);
             if (!response.ok) {
                 const errorText = await response.text();
@@ -1894,56 +1886,150 @@ app.get('/api/aspro/tasks', async (req, res) => {
             const items = data.response?.items || [];
             total = data.response?.total || 0;
             allItems.push(...items);
+            console.log(`[aspro-tasks] Страница ${page}: ${items.length} задач, всего ${allItems.length}/${total}`);
 
             if (allItems.length >= total) break;
             if (items.length < perPage) break;
             page++;
-            if (page > 500) break;
+            if (page > 200) break;
         }
 
-        // Фильтрация
-        let filtered = allItems.filter(t => {
-            if (Number(t.archive_status) !== 0) return false;
-            const haystack = JSON.stringify(t).toLowerCase();
-            if (!haystack.includes('расшивки')) return false;
-            return true;
+        console.log(`[aspro-tasks] Загружено ${allItems.length} задач. Фильтруем...`);
+        const unclosed = allItems.filter(t => {
+            const cd = t.closed_date;
+            return !cd || cd === '0000-00-00 00:00:00' || cd === null || cd === '';
         });
+        console.log(`[aspro-tasks] Из них незакрытых: ${unclosed.length}`);
+        const filtered = unclosed.filter(t => {
+            const haystack = JSON.stringify(t).toLowerCase();
+            return haystack.includes('расшивки созданы');
+        });
+        console.log(`[aspro-tasks] Найдено ${filtered.length} незакрытых задач с "Расшивки созданы"`);
 
-        if (status) {
-            const statusArr = Array.isArray(status) ? status : [status];
-            filtered = filtered.filter(t => statusArr.includes(String(t.status)));
-        }
-
-        // Загружаем проекты
+        // Загружаем стадии проектов для сопоставления project_stage_id -> проект и название этапа
+        console.log('[aspro-tasks] Загружаем стадии проектов...');
+        let stageToProject = {};
+        let stageMap = {}; // stage_id -> stage_name
         let projectsMap = {};
         try {
+            // Загружаем все проекты (до 500)
             const projUrl = `https://inteko.aspro.cloud/api/v1/module/st/projects/list?api_key=${apiKey}&per_page=500`;
             const projRes = await fetch(projUrl);
             if (projRes.ok) {
                 const projData = await projRes.json();
                 const projItems = projData.response?.items || [];
                 projItems.forEach(p => { if (p.id) projectsMap[p.id] = p.name; });
+                console.log(`[aspro-tasks] Загружено ${projItems.length} проектов`);
             }
-        } catch (_) {}
 
-        const enriched = filtered.map(task => {
-            let modelId = task.model_id;
-            if (modelId === undefined || modelId === null) modelId = task.project_id;
-            if (modelId === undefined || modelId === null) modelId = task.ref_id;
-            if (modelId === undefined || modelId === null) {
+            // Пробуем получить стадии (шаблоны) проектов
+            const stagesUrl = `https://inteko.aspro.cloud/api/v1/module/st/projects/stages?api_key=${apiKey}`;
+            const stagesRes = await fetch(stagesUrl);
+            if (stagesRes.ok) {
+                const stagesData = await stagesRes.json();
+                const stages = stagesData.response?.items || stagesData.response || [];
+                (Array.isArray(stages) ? stages : []).forEach(s => {
+                    if (s.id && s.project_id) {
+                        stageToProject[s.id] = { projectId: s.project_id, projectName: projectsMap[s.project_id] || '' };
+                    }
+                    if (s.id && s.name) {
+                        stageMap[s.id] = s.name;
+                    }
+                });
+                console.log(`[aspro-tasks] Загружено ${Object.keys(stageToProject).length} стадий проектов и ${Object.keys(stageMap).length} названий этапов`);
+            }
+
+            // Если стадии не загрузились, пробуем альтернативный эндпоинт
+            if (Object.keys(stageToProject).length === 0) {
+                const altUrl = `https://inteko.aspro.cloud/api/v1/module/st/projects/stages/list?api_key=${apiKey}`;
+                const altRes = await fetch(altUrl);
+                if (altRes.ok) {
+                    const altData = await altRes.json();
+                    const altStages = altData.response?.items || altData.response || [];
+                    (Array.isArray(altStages) ? altStages : []).forEach(s => {
+                        if (s.id && s.project_id) {
+                            stageToProject[s.id] = { projectId: s.project_id, projectName: projectsMap[s.project_id] || '' };
+                        }
+                        if (s.id && s.name) {
+                            stageMap[s.id] = s.name;
+                        }
+                    });
+                    console.log(`[aspro-tasks] Загружено ${Object.keys(stageToProject).length} стадий (альт) и ${Object.keys(stageMap).length} названий этапов`);
+                }
+            }
+        } catch (e) {
+            console.warn('[aspro-tasks] Не удалось загрузить проекты/стадии:', e.message);
+        }
+
+        // Для каждой задачи пытаемся получить детальную информацию с проектом и model_id
+        const enriched = [];
+        for (const task of filtered) {
+            let projectName = '';
+            let projectId = '';
+            let modelId = null;
+            let stageName = null;
+
+            // Сначала пробуем через project_stage_id
+            if (task.project_stage_id && stageToProject[task.project_stage_id]) {
+                projectId = stageToProject[task.project_stage_id].projectId;
+                projectName = stageToProject[task.project_stage_id].projectName;
+                stageName = stageMap[task.project_stage_id] || null;
+            }
+
+            // Ищем model_id в задаче
+            if (task.model_id) {
+                modelId = task.model_id;
+            } else if (task.extra_fields) {
                 try {
-                    const ef = typeof task.extra_fields === 'string' ? JSON.parse(task.extra_fields) : (task.extra_fields || {});
-                    modelId = ef.project_id || ef.model_id || null;
+                    const ef = typeof task.extra_fields === 'string' ? JSON.parse(task.extra_fields) : task.extra_fields;
+                    if (ef.model_id) modelId = ef.model_id;
                 } catch (_) {}
             }
-            if (modelId === 0 || modelId === '0') modelId = null;
 
-            console.log(`[aspro-tasks] Задача #${task.id}: model_id=${task.model_id}, resolved=${modelId}`);
-            const projectName = modelId && projectsMap[modelId] ? projectsMap[modelId] : '';
-            return { ...task, _project_name: projectName, _model_id: modelId };
-        });
+            // Если не нашли через стадию, пробуем получить детальную информацию о задаче
+            if (!projectName && task.id) {
+                try {
+                    const detailUrl = `https://inteko.aspro.cloud/api/v1/module/task/tasks/get/${task.id}?api_key=${apiKey}&customfields=1`;
+                    const detailRes = await fetch(detailUrl);
+                    if (detailRes.ok) {
+                        const detailData = await detailRes.json();
+                        const detail = detailData.response || {};
+                        // Ищем project_id в полях задачи
+                        if (detail.project_id && projectsMap[detail.project_id]) {
+                            projectName = projectsMap[detail.project_id];
+                            projectId = detail.project_id;
+                        }
+                        // Ищем в extra_fields
+                        if (!projectName && detail.extra_fields) {
+                            try {
+                                const ef = typeof detail.extra_fields === 'string'
+                                    ? JSON.parse(detail.extra_fields) : detail.extra_fields;
+                                if (ef.project_id && projectsMap[ef.project_id]) {
+                                    projectName = projectsMap[ef.project_id];
+                                    projectId = ef.project_id;
+                                }
+                                if (ef.model_id) modelId = ef.model_id;
+                            } catch (_) {}
+                        }
+                        // Ищем через ref
+                        if (!projectName && detail.ref === 'project' && detail.ref_id && projectsMap[detail.ref_id]) {
+                            projectName = projectsMap[detail.ref_id];
+                            projectId = detail.ref_id;
+                        }
+                    }
+                } catch (_) {}
+            }
 
-        console.log(`[aspro-tasks] Отправляем ${enriched.length} задач`);
+            enriched.push({
+                ...task,
+                _project_name: projectName,
+                _project_id: projectId,
+                _model_id: modelId,
+                _stage_name: stageName
+            });
+        }
+
+        console.log(`[aspro-tasks] Отправляем ${enriched.length} обогащённых задач`);
         res.json({ items: enriched, total: enriched.length, rawTotal: total });
     } catch (error) {
         console.error('Ошибка при получении задач:', error);

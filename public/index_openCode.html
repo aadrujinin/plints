@@ -658,9 +658,6 @@
             flex-wrap: wrap;
             align-items: center;
         }
-        .stage-label { display:inline-flex; align-items:center; gap:3px; background:#f0f4f8; padding:4px 10px; border-radius:14px; cursor:pointer; font-size:0.9rem; user-select:none; }
-        .stage-label:hover { background:#e2e8f0; }
-        .stage-label input { margin:0; }
         .add-file-form input[type="text"] {
             padding: 6px 12px;
             border-radius: 14px;
@@ -940,32 +937,14 @@
 
 <!-- Модальное окно для задач Aspro -->
 <div class="modal-overlay" id="tasksModal">
-    <div class="modal-content" style="max-width:1600px;">
+    <div class="modal-content" style="max-width:900px;">
         <div class="modal-header">
             <h2>📋 Задачи (Расшивки созданы)</h2>
             <button class="modal-close" id="closeTasksModal">✕ Закрыть</button>
         </div>
         <div class="modal-body" id="tasksModalBody">
-            <div class="filter-panel" style="margin-bottom:10px;flex-wrap:wrap;gap:6px;">
-                <span style="font-weight:600;margin-right:4px;">Этапы:</span>
-                <label class="stage-label"><input type="checkbox" class="stage-filter" value="1" checked> Сделать</label>
-                <label class="stage-label"><input type="checkbox" class="stage-filter" value="2" checked> В работе</label>
-                <label class="stage-label"><input type="checkbox" class="stage-filter" value="3" checked> Проблема</label>
-                <label class="stage-label"><input type="checkbox" class="stage-filter" value="4" checked> Сделано</label>
-                <label class="stage-label"><input type="checkbox" class="stage-filter" value="5" checked> Завершено</label>
-                <button type="button" id="refreshTasksBtn" class="btn-secondary" style="margin-left:4px;">🔄 Обновить</button>
-            </div>
-            <div id="tasksProgress" style="display:none;margin-bottom:8px;">
-                <div style="display:flex;justify-content:space-between;font-size:0.85rem;color:#555;margin-bottom:2px;">
-                    <span id="tasksProgressText">Загрузка...</span>
-                    <span id="tasksProgressCount"></span>
-                </div>
-                <div style="width:100%;height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;">
-                    <div id="tasksProgressBar" style="width:0%;height:100%;background:#1e4663;border-radius:4px;transition:width 0.3s;"></div>
-                </div>
-            </div>
             <div id="tasksListContainer">
-                <p>Нажмите "Обновить" для загрузки задач</p>
+                <p>Загрузка...</p>
             </div>
         </div>
     </div>
@@ -1017,8 +996,8 @@
     let allProjectsData = [];
 
     function escapeHtml(str) {
-        if (str === null || str === undefined) return '';
-        return String(str).replace(/[&<>]/g, m => (m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;'));
+        if (!str) return '';
+        return str.replace(/[&<>]/g, m => (m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;'));
     }
 
     // ---------- Вспомогательные функции ----------
@@ -2272,102 +2251,73 @@
     });
 
     // ---------- ЗАДАЧИ ASPRO ----------
-    function loadTasks() {
+    document.getElementById('showTasksBtn').addEventListener('click', async function() {
         const modal = document.getElementById('tasksModal');
-        if (!modal.classList.contains('active')) modal.classList.add('active');
         const container = document.getElementById('tasksListContainer');
-        const progress = document.getElementById('tasksProgress');
-        const progressBar = document.getElementById('tasksProgressBar');
-        const progressText = document.getElementById('tasksProgressText');
-        const progressCount = document.getElementById('tasksProgressCount');
-
-        container.innerHTML = '';
-        progress.style.display = 'block';
-        progressBar.style.width = '0%';
-        progressText.textContent = 'Подготовка...';
-        progressCount.textContent = '';
-
-        const checks = document.querySelectorAll('.stage-filter:checked');
-        const statuses = Array.from(checks).map(c => c.value);
-        let url = `/api/aspro/tasks?search=${encodeURIComponent('Расшивки')}`;
-        statuses.forEach(s => { url += `&status=${s}`; });
-
-        (async () => {
-            progressBar.style.width = '30%';
-            progressText.textContent = 'Загрузка задач...';
-            try {
-                const response = await fetch(url);
-                progressBar.style.width = '60%';
-                progressText.textContent = 'Обработка...';
-                if (!response.ok) {
-                    const errData = await response.json().catch(() => ({}));
-                    throw new Error(errData.error || `Ошибка ${response.status}`);
-                }
-                const data = await response.json();
-                progressBar.style.width = '90%';
-                progressText.textContent = 'Фильтрация...';
-                if (!data.items || data.items.length === 0) {
-                    progress.style.display = 'none';
-                    container.innerHTML = '<p>Нет задач по выбранным фильтрам</p>';
-                    return;
-                }
-                progressBar.style.width = '100%';
-                progressText.textContent = 'Готово';
-                progressCount.textContent = `${data.total} задач`;
-                const statusMap = {1:'Сделать',2:'В работе',3:'Проблема',4:'Сделано',5:'Завершено'};
-                let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-weight:600;"><span>Найдено задач: ${data.total}</span><span style="color:#888;font-size:0.85rem;">Всего в API: ${data.rawTotal || '?'}</span></div>`;
-                html += `<table class="projects-table" style="width:100%;">
-                    <thead>
-                        <tr>
-                            <th style="text-align:left;">Задача</th>
-                            <th style="text-align:left;">Проект</th>
-                            <th style="text-align:left;">ID проекта</th>
-                            <th style="text-align:left;">Дата начала</th>
-                            <th style="text-align:left;">Дата окончания</th>
-                            <th style="text-align:left;">Статус</th>
-                        </tr>
-                    </thead>
-                    <tbody>`;
-                data.items.forEach(task => {
-                    const taskName = task.name || 'Без названия';
-                    const projectName = task._project_name || '';
-                    const modelId = task._model_id || task.model_id;
-                    const taskLink = `https://inteko.aspro.cloud/_module/task/view/task/${task.id}`;
-                    const projectLink = modelId ? `https://inteko.aspro.cloud/_module/st/view/project/${modelId}?tab=project_info` : '';
-                    const startDate = task.plan_start_date ? new Date(task.plan_start_date).toLocaleDateString('ru-RU') : '—';
-                    const endDate = task.plan_end_date ? new Date(task.plan_end_date).toLocaleDateString('ru-RU') : '—';
-                    const statusDisplay = statusMap[task.status] || `Этап ${task.status}`;
-                    let projCell;
-                    if (projectLink) {
-                        projCell = `<a href="${projectLink}" target="_blank" style="color:#1e4663;text-decoration:underline;">${escapeHtml(projectName || projectLink)}</a>`;
-                    } else {
-                        projCell = escapeHtml(projectName) || `<span style="color:#999;">—</span>`;
-                    }
-                    html += `<tr>
-                        <td><a href="${taskLink}" target="_blank" style="color:#1e4663;text-decoration:underline;">${escapeHtml(taskName)}</a></td>
-                        <td>${projCell}</td>
-                        <td style="color:#888;font-size:0.85rem;">${modelId || '—'}</td>
-                        <td>${startDate}</td>
-                        <td>${endDate}</td>
-                        <td><span class="status-badge status-downloaded">${statusDisplay}</span></td>
-                    </tr>`;
-                });
-                html += `</tbody></table>`;
-                html += `<div style="margin-top:8px;font-weight:600;text-align:right;">Найдено задач: ${data.total}</div>`;
-                container.innerHTML = html;
-            } catch (err) {
-                progress.style.display = 'none';
-                container.innerHTML = `<p style="color:red;">❌ ${err.message}</p>`;
+        container.innerHTML = '<p>Загрузка...</p>';
+        modal.classList.add('active');
+        try {
+            const response = await fetch('/api/aspro/tasks');
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || 'Ошибка загрузки');
             }
-        })();
-    }
+            const data = await response.json();
+            if (!data.items || data.items.length === 0) {
+                container.innerHTML = '<p>Нет незакрытых задач с текстом "Расшивки созданы"</p>';
+                return;
+            }
+            let html = `<p>Найдено задач: ${data.total}</p>`;
+            html += data.items.map(task => {
+                const projectName = task._project_name || '';
+                const card = document.createElement('div');
+                card.className = 'board-card';
+                card.style.cssText = 'padding:12px;margin-bottom:8px;';
 
-    document.getElementById('showTasksBtn').addEventListener('click', function() {
-        document.getElementById('tasksModal').classList.add('active');
-        document.getElementById('tasksListContainer').innerHTML = '<p>Выберите этапы и нажмите "Обновить"</p>';
+                let fields = `<div style="font-size:1.1rem;font-weight:600;margin-bottom:8px;">${task.name || ''}</div>`;
+                if (projectName) {
+                    const pid = task._project_id || '';
+                    const projUrl = pid ? `https://inteko.aspro.cloud/st/projects/view/${pid}` : '#';
+                    fields += `<div style="margin-bottom:4px;font-size:1.05rem;"><strong>Проект:</strong> <a href="${projUrl}" target="_blank" style="color:#1e4663;text-decoration:underline;">${projectName}</a></div>`;
+                } else if (task.project_stage_id) {
+                    fields += `<div style="color:#888;margin-bottom:4px;"><strong>project_stage_id:</strong> ${task.project_stage_id}</div>`;
+                }
+
+                const mainFields = ['id','status','project_stage_id','deadline','created_date','priority','description'];
+                const seen = new Set();
+                for (const key of mainFields) {
+                    if (key === '_project_name') continue;
+                    const val = task[key];
+                    if (val === null || val === undefined || val === '') continue;
+                    seen.add(key);
+                    let displayVal = String(val);
+                    if (key === 'description') {
+                        const temp = document.createElement('div');
+                        temp.innerHTML = val;
+                        displayVal = temp.textContent || temp.innerText || val;
+                    }
+                    fields += `<div style="margin:2px 0;"><strong>${key}:</strong> ${displayVal}</div>`;
+                }
+
+                fields += `<details style="margin-top:6px;"><summary style="cursor:pointer;color:#666;font-size:0.9rem;">Все поля (${Object.keys(task).length})</summary><div style="font-size:0.85rem;max-height:300px;overflow-y:auto;margin-top:4px;">`;
+                for (const [key, val] of Object.entries(task)) {
+                    if (seen.has(key) || key === '_project_name') continue;
+                    if (val === null || val === undefined || val === '') continue;
+                    let displayVal = String(val);
+                    if (typeof val === 'string' && val.startsWith('{')) {
+                        try { const parsed = JSON.parse(val); displayVal = JSON.stringify(parsed, null, 1); } catch(_) {}
+                    }
+                    fields += `<div style="margin:1px 0;"><strong>${key}:</strong> ${displayVal.length > 200 ? displayVal.substring(0,200)+'...' : displayVal}</div>`;
+                }
+                fields += `</div></details>`;
+                card.innerHTML = fields;
+                return card.outerHTML;
+            }).join('');
+            container.innerHTML = html;
+        } catch (err) {
+            container.innerHTML = `<p style="color:red;">❌ ${err.message}</p>`;
+        }
     });
-    document.getElementById('refreshTasksBtn').addEventListener('click', loadTasks);
-
     document.getElementById('closeTasksModal').addEventListener('click', function() {
         document.getElementById('tasksModal').classList.remove('active');
     });
