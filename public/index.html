@@ -639,6 +639,13 @@
             min-width: 140px;
         }
 
+        .projects-stats {
+            padding: 8px 12px;
+            font-size: 0.85rem;
+            background: #f0f7ff;
+            border-bottom: 1px solid #d0e2f0;
+            color: #1e4663;
+        }
         .projects-table {
             width: 100%;
             border-collapse: collapse;
@@ -1708,6 +1715,18 @@
             const notArchived = [false, 0, '0', 'false'];
             return !notArchived.includes(p && p.is_archive);
         }
+        // Подсчёт статистики
+        const nameMap = {};
+        allProjectsData.forEach(p => {
+            if (!nameMap[p.name]) {
+                nameMap[p.name] = { name: p.name, is_archive: isArchived(p) };
+            }
+        });
+        const allNames = Object.values(nameMap);
+        const totalAll = allNames.length;
+        const totalArchived = allNames.filter(n => n.is_archive).length;
+        const totalActive = totalAll - totalArchived;
+
         if (archiveFilter === 'active') {
             filtered = filtered.filter(p => !isArchived(p));
         } else if (archiveFilter === 'archived') {
@@ -1748,6 +1767,11 @@
         }
 
         let html = `
+            <div class="projects-stats">
+                Всего: <strong>${totalAll}</strong> &nbsp;|&nbsp;
+                Не архивные: <strong>${totalActive}</strong> &nbsp;|&nbsp;
+                Архивные: <strong>${totalArchived}</strong>
+            </div>
             <table class="projects-table">
                 <thead>
                     <tr>
