@@ -1269,11 +1269,13 @@ app.get('/api/projects/sync-stream', async (req, res) => {
                         'INSERT INTO projects (id, name, is_archive, expanded_downloaded, cf_92, cf_217) VALUES ($1, $2, $3, $4, $5, $6)',
                         [id, name, isArchiveBool, false, cf_92, cf_217]
                     );
+                    console.log(`[БД] INSERT project id=${id}, name="${name}"`);
                 } else {
                     await client.query(
                         'UPDATE projects SET name = $1, is_archive = $2, cf_92 = $3, cf_217 = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5',
                         [name, isArchiveBool, cf_92, cf_217, id]
                     );
+                    console.log(`[БД] UPDATE project id=${id}, name="${name}"`);
                 }
                 processed++;
                 if (processed % 10 === 0 || processed === allProjects.length) {
@@ -1355,11 +1357,13 @@ app.post('/api/projects/sync', async (req, res) => {
                         'INSERT INTO projects (id, name, is_archive, expanded_downloaded, cf_92, cf_217) VALUES ($1, $2, $3, $4, $5, $6)',
                         [id, name, isArchiveBool, false, cf_92, cf_217]
                     );
+                    console.log(`[БД] INSERT project id=${id}, name="${name}"`);
                 } else {
                     await client.query(
                         'UPDATE projects SET name = $1, is_archive = $2, cf_92 = $3, cf_217 = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5',
                         [name, isArchiveBool, cf_92, cf_217, id]
                     );
+                    console.log(`[БД] UPDATE project id=${id}, name="${name}"`);
                 }
             }
             await client.query('COMMIT');
@@ -1407,6 +1411,7 @@ app.post('/api/projects/update-status', async (req, res) => {
                         [name, filePath, fileName]
                     );
                     updatedCount++;
+                    console.log(`[БД] UPDATE status fileName="${fileName}"`);
                 } else {
                     const tempId = -Date.now() - Math.floor(Math.random() * 1000);
                     await client.query(
@@ -1416,6 +1421,7 @@ app.post('/api/projects/update-status', async (req, res) => {
                         [tempId, name, false, true, fileName, filePath]
                     );
                     createdCount++;
+                    console.log(`[БД] INSERT status fileName="${fileName}"`);
                 }
             }
             await client.query('COMMIT');
