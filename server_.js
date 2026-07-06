@@ -441,8 +441,8 @@ async function fillPlinthBlockSV005(worksheet, startRow, blockType, plinthData, 
     }
 }
 
-// ---------- ЗАПОЛНЕНИЕ БЛОКА SV004 ----------
-async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel) {
+// ---------- ЗАПОЛНЕНИЕ БЛОКА SV004 (с поддержкой ОПС и сбросом заливки) ----------
+async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel, isLast = false) {
     const groups = [
         { offsetDev: 14, offsetRoom: 15, pins: [0,1,2,3] }
     ];
@@ -485,26 +485,50 @@ async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel
             const pin = group.pins[i];
             const colDevice = ['B','F','J','N'][i];
             const colCable = ['D','H','L','P'][i];
-            const device = tm[pin] || '';
-            const cable = cm[pin] || '';
+            let device = tm[pin] || '';
+            let cable = cm[pin] || '';
             let room = (rm[pin] && rm[pin].trim()) ? rm[pin] : '';
 
-            if (!device) {
+            // Принудительная установка ОПС на последнем пине последнего плинта
+            if (isLast && pin === 3) {
+                device = 'ОПС';
+                cable = '';
                 room = 'Резерв';
             }
 
-            worksheet.getCell(`${colDevice}${devRow}`).value = device;
-            worksheet.getCell(`${colCable}${devRow}`).value = cable;
+            const devCell = worksheet.getCell(`${colDevice}${devRow}`);
+            const cableCell = worksheet.getCell(`${colCable}${devRow}`);
+            const roomDevCell = worksheet.getCell(`${colDevice}${roomRow}`);
+            const roomNumCell = worksheet.getCell(`${colCable}${roomRow}`);
 
+            // Сброс заливки для всех ячеек, которые мы перезаписываем
+            devCell.fill = undefined;
+            cableCell.fill = undefined;
+            roomDevCell.fill = undefined;
+            roomNumCell.fill = undefined;
+
+            // Установка значений
+            devCell.value = device;
+            cableCell.value = cable;
+
+            // Заливка красным для ОПС (только для пина 3 последнего плинта)
+            if (isLast && pin === 3) {
+                devCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF0000' } };
+                cableCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF0000' } };
+                roomDevCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF0000' } };
+                roomNumCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF0000' } };
+            }
+
+            // Установка помещения
             if (room === 'Резерв') {
-                worksheet.getCell(`${colDevice}${roomRow}`).value = 'Резерв';
-                worksheet.getCell(`${colCable}${roomRow}`).value = '';
+                roomDevCell.value = 'Резерв';
+                roomNumCell.value = '';
             } else if (room) {
-                worksheet.getCell(`${colDevice}${roomRow}`).value = 'пом.';
-                worksheet.getCell(`${colCable}${roomRow}`).value = room;
+                roomDevCell.value = 'пом.';
+                roomNumCell.value = room;
             } else {
-                worksheet.getCell(`${colDevice}${roomRow}`).value = '';
-                worksheet.getCell(`${colCable}${roomRow}`).value = '';
+                roomDevCell.value = '';
+                roomNumCell.value = '';
             }
         }
     }
@@ -654,13 +678,11 @@ function createCommonCheatSheetSV004(workbook) {
     if (!commonSheet) {
         commonSheet = workbook.addWorksheet(commonSheetName);
     } else {
-        // Очищаем все строки, кроме заголовка (строки 1-2)
         if (commonSheet.rowCount >= 2) {
             commonSheet.spliceRows(2, commonSheet.rowCount - 1);
         }
     }
 
-    // Копируем заголовок (строка 2) из первой шпоргалки
     const firstCheat = workbook.getWorksheet('шпоргалка-1');
     if (firstCheat) {
         const srcRow = firstCheat.getRow(2);
@@ -672,14 +694,11 @@ function createCommonCheatSheetSV004(workbook) {
         dstRow.height = srcRow.height;
     }
 
-    let targetRowIndex = 4; // Данные начинаются с 4-й строки
-
-    // Последовательно копируем данные из шпоргалка-1, -2, -3
+    let targetRowIndex = 4;
     for (let i = 1; i <= 3; i++) {
         const cheatName = `шпоргалка-${i}`;
         const cheatSheet = workbook.getWorksheet(cheatName);
         if (!cheatSheet) continue;
-
         const lastRow = cheatSheet.rowCount;
         for (let r = 4; r <= lastRow; r++) {
             const srcRow = cheatSheet.getRow(r);
@@ -690,7 +709,6 @@ function createCommonCheatSheetSV004(workbook) {
                 }
             });
             if (!hasData) continue;
-
             const dstRow = commonSheet.getRow(targetRowIndex);
             srcRow.eachCell((cell, colNumber) => {
                 dstRow.getCell(colNumber).value = cell.value;
@@ -1021,7 +1039,6 @@ app.post('/generate-sv005', async (req, res) => {
             worksheet.spliceRows(block.startRow, rowCount);
         }
 
-        // Удаляем строки после последнего использованного блока
         const lastUsedEndRow = Math.max(
             ...usedInputBlocks.map(b => b.endRow),
             ...usedOutputBlocks.map(b => b.endRow)
@@ -1041,7 +1058,7 @@ app.post('/generate-sv005', async (req, res) => {
         const buffer = await workbook.xlsx.writeBuffer();
 
         const addressPart = extractAddressPart(address);
-        const safeAddress = addressPart.replace(/[\/\\:*?"<>|]/g, '_');
+        const safeAddress = addressPart.replace(/[\\/:*?"<>|]/g, '_');
         const dateStr = new Date().toISOString().slice(0, 10);
         const filename = `${safeAddress}_${dateStr}_SV005.xlsx`;
 
@@ -1121,6 +1138,9 @@ app.post('/generate-sv004', async (req, res) => {
         const usedInputBlocks = inputBlocks.slice(0, neededPairs);
         const usedOutputBlocks = outputBlocks.slice(0, neededPairs);
 
+        let plinthCounter = 1;
+        const totalPlinths = boards.length * 2;
+
         for (let i = 0; i < boards.length; i++) {
             const board = boards[i];
             const boardNumber = i + 1;
@@ -1138,8 +1158,10 @@ app.post('/generate-sv004', async (req, res) => {
                     cableMap: board.plinth1.cableMap,
                     roomMap: board.plinth1.roomMap || {}
                 },
-                globalModel
+                globalModel,
+                plinthCounter === totalPlinths   // isLast
             );
+            plinthCounter++;
 
             await fillPlinthBlockSV004(
                 worksheet,
@@ -1154,8 +1176,10 @@ app.post('/generate-sv004', async (req, res) => {
                     cableMap: board.plinth2.cableMap,
                     roomMap: board.plinth2.roomMap || {}
                 },
-                globalModel
+                globalModel,
+                plinthCounter === totalPlinths   // isLast
             );
+            plinthCounter++;
         }
         addLog(`[SV004] Данные плат заполнены`);
 
@@ -1169,7 +1193,6 @@ app.post('/generate-sv004', async (req, res) => {
             worksheet.spliceRows(block.startRow, rowCount);
         }
 
-        // Удаляем строки после последнего использованного блока
         const lastUsedEndRow = Math.max(
             ...usedInputBlocks.map(b => b.endRow),
             ...usedOutputBlocks.map(b => b.endRow)
@@ -1184,7 +1207,6 @@ app.post('/generate-sv004', async (req, res) => {
         fillSheetsSV004(workbook, boards, globalModel);
         addLog(`[SV004] Шпоргалки/Disp заполнены`);
 
-        // Создаём общую шпоргалку
         createCommonCheatSheetSV004(workbook);
 
         applyAutoFit(workbook);
@@ -1527,7 +1549,6 @@ app.post('/api/projects/add-file', upload.single('file'), async (req, res) => {
             console.log(`[БД] INSERT manual file: name="${name}", file="${file_name}"`);
             return res.json({ success: true, id: pendingId });
         }
-        // Папки нет — запрашиваем подтверждение
         const pendingId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
         pendingFileUploads.set(pendingId, { name, file_name, tempPath, networkFolder, safeName });
         setTimeout(() => { pendingFileUploads.delete(pendingId); }, 120000);
@@ -1565,7 +1586,6 @@ app.post('/api/projects/add-file-confirm', async (req, res) => {
             console.log(`[БД] INSERT manual file: name="${name}", file="${file_name}"`);
             return res.json({ success: true, id: tempId });
         }
-        // Отказ — сохраняем в uploads
         try { fs.unlinkSync(tempPath); } catch (_) {}
         console.log(`[add-file] пользователь отказался, файл удалён: ${tempPath}`);
         res.json({ success: false, message: 'Файл не добавлен' });
@@ -1589,14 +1609,14 @@ app.post('/api/import-xlsx', upload.single('file'), async (req, res) => {
         const isSV004 = sheetNames.some(n => n.includes('SV004') || n.startsWith('шпоргалка-') || n.startsWith('Disp-'));
         const isSV005 = !isSV004 && (sheetNames.some(n => n === 'Лист1' || n === 'шпоргалка' || n === 'Шпора общая'));
 
-        const origName = req.file.originalname || '';
-        const addrMatch = origName.match(/^(.+?)_(20\d{2})/);
-        if (addrMatch) result.address = addrMatch[1].replace(/_/g, ' ').trim();
-
         const mainSheet = workbook.worksheets[0];
         if (!mainSheet) return res.status(400).json({ error: 'Нет листов в книге' });
 
         const result = { type: isSV004 ? 'SV004' : 'SV005', address: '', rack: '', boards: [] };
+
+        const origName = req.file.originalname || '';
+        const addrMatch = origName.match(/^(.+?)_(20\d{2})/);
+        if (addrMatch) result.address = addrMatch[1].replace(/_/g, ' ').trim();
 
         if (isSV005) {
             const blocks = getBlocksSV005(mainSheet);
@@ -1867,16 +1887,24 @@ app.get('/api/projects/search', async (req, res) => {
 app.get('/api/aspro/tasks', async (req, res) => {
     const apiKey = process.env.API_KEY;
     if (!apiKey) return res.status(500).json({ error: 'API_KEY не задан в .env' });
+    const { search, status } = req.query;
     try {
         const allItems = [];
         let page = 1;
         const perPage = 50;
         let total = 0;
 
-        console.log('[aspro-tasks] Начинаем загрузку задач...');
+        let baseUrl = `https://inteko.aspro.cloud/api/v1/module/task/tasks/list?api_key=${apiKey}&customfields=1&per_page=${perPage}&filter[archive_status]=0`;
+        if (search) baseUrl += `&q=${encodeURIComponent(search)}`;
+
+        let statusFilterStr = '';
+        if (status) {
+            const statusArr = Array.isArray(status) ? status : [status];
+            statusArr.forEach(s => { statusFilterStr += `&filter[status][]=${encodeURIComponent(s)}`; });
+        }
+
         while (true) {
-            const url = `https://inteko.aspro.cloud/api/v1/module/task/tasks/list?api_key=${apiKey}&page=${page}&per_page=${perPage}&customfields=1`;
-            console.log(`[aspro-tasks] Страница ${page}...`);
+            const url = `${baseUrl}&page=${page}${statusFilterStr}`;
             const response = await fetch(url);
             if (!response.ok) {
                 const errorText = await response.text();
@@ -1886,150 +1914,54 @@ app.get('/api/aspro/tasks', async (req, res) => {
             const items = data.response?.items || [];
             total = data.response?.total || 0;
             allItems.push(...items);
-            console.log(`[aspro-tasks] Страница ${page}: ${items.length} задач, всего ${allItems.length}/${total}`);
 
             if (allItems.length >= total) break;
             if (items.length < perPage) break;
             page++;
-            if (page > 200) break;
+            if (page > 500) break;
         }
 
-        console.log(`[aspro-tasks] Загружено ${allItems.length} задач. Фильтруем...`);
-        const unclosed = allItems.filter(t => {
-            const cd = t.closed_date;
-            return !cd || cd === '0000-00-00 00:00:00' || cd === null || cd === '';
-        });
-        console.log(`[aspro-tasks] Из них незакрытых: ${unclosed.length}`);
-        const filtered = unclosed.filter(t => {
+        let filtered = allItems.filter(t => {
+            if (Number(t.archive_status) !== 0) return false;
             const haystack = JSON.stringify(t).toLowerCase();
-            return haystack.includes('расшивки созданы');
+            if (!haystack.includes('расшивки')) return false;
+            return true;
         });
-        console.log(`[aspro-tasks] Найдено ${filtered.length} незакрытых задач с "Расшивки созданы"`);
 
-        // Загружаем стадии проектов для сопоставления project_stage_id -> проект и название этапа
-        console.log('[aspro-tasks] Загружаем стадии проектов...');
-        let stageToProject = {};
-        let stageMap = {}; // stage_id -> stage_name
+        if (status) {
+            const statusArr = Array.isArray(status) ? status : [status];
+            filtered = filtered.filter(t => statusArr.includes(String(t.status)));
+        }
+
         let projectsMap = {};
         try {
-            // Загружаем все проекты (до 500)
             const projUrl = `https://inteko.aspro.cloud/api/v1/module/st/projects/list?api_key=${apiKey}&per_page=500`;
             const projRes = await fetch(projUrl);
             if (projRes.ok) {
                 const projData = await projRes.json();
                 const projItems = projData.response?.items || [];
                 projItems.forEach(p => { if (p.id) projectsMap[p.id] = p.name; });
-                console.log(`[aspro-tasks] Загружено ${projItems.length} проектов`);
             }
+        } catch (_) {}
 
-            // Пробуем получить стадии (шаблоны) проектов
-            const stagesUrl = `https://inteko.aspro.cloud/api/v1/module/st/projects/stages?api_key=${apiKey}`;
-            const stagesRes = await fetch(stagesUrl);
-            if (stagesRes.ok) {
-                const stagesData = await stagesRes.json();
-                const stages = stagesData.response?.items || stagesData.response || [];
-                (Array.isArray(stages) ? stages : []).forEach(s => {
-                    if (s.id && s.project_id) {
-                        stageToProject[s.id] = { projectId: s.project_id, projectName: projectsMap[s.project_id] || '' };
-                    }
-                    if (s.id && s.name) {
-                        stageMap[s.id] = s.name;
-                    }
-                });
-                console.log(`[aspro-tasks] Загружено ${Object.keys(stageToProject).length} стадий проектов и ${Object.keys(stageMap).length} названий этапов`);
-            }
-
-            // Если стадии не загрузились, пробуем альтернативный эндпоинт
-            if (Object.keys(stageToProject).length === 0) {
-                const altUrl = `https://inteko.aspro.cloud/api/v1/module/st/projects/stages/list?api_key=${apiKey}`;
-                const altRes = await fetch(altUrl);
-                if (altRes.ok) {
-                    const altData = await altRes.json();
-                    const altStages = altData.response?.items || altData.response || [];
-                    (Array.isArray(altStages) ? altStages : []).forEach(s => {
-                        if (s.id && s.project_id) {
-                            stageToProject[s.id] = { projectId: s.project_id, projectName: projectsMap[s.project_id] || '' };
-                        }
-                        if (s.id && s.name) {
-                            stageMap[s.id] = s.name;
-                        }
-                    });
-                    console.log(`[aspro-tasks] Загружено ${Object.keys(stageToProject).length} стадий (альт) и ${Object.keys(stageMap).length} названий этапов`);
-                }
-            }
-        } catch (e) {
-            console.warn('[aspro-tasks] Не удалось загрузить проекты/стадии:', e.message);
-        }
-
-        // Для каждой задачи пытаемся получить детальную информацию с проектом и model_id
-        const enriched = [];
-        for (const task of filtered) {
-            let projectName = '';
-            let projectId = '';
-            let modelId = null;
-            let stageName = null;
-
-            // Сначала пробуем через project_stage_id
-            if (task.project_stage_id && stageToProject[task.project_stage_id]) {
-                projectId = stageToProject[task.project_stage_id].projectId;
-                projectName = stageToProject[task.project_stage_id].projectName;
-                stageName = stageMap[task.project_stage_id] || null;
-            }
-
-            // Ищем model_id в задаче
-            if (task.model_id) {
-                modelId = task.model_id;
-            } else if (task.extra_fields) {
+        const enriched = filtered.map(task => {
+            let modelId = task.model_id;
+            if (modelId === undefined || modelId === null) modelId = task.project_id;
+            if (modelId === undefined || modelId === null) modelId = task.ref_id;
+            if (modelId === undefined || modelId === null) {
                 try {
-                    const ef = typeof task.extra_fields === 'string' ? JSON.parse(task.extra_fields) : task.extra_fields;
-                    if (ef.model_id) modelId = ef.model_id;
+                    const ef = typeof task.extra_fields === 'string' ? JSON.parse(task.extra_fields) : (task.extra_fields || {});
+                    modelId = ef.project_id || ef.model_id || null;
                 } catch (_) {}
             }
+            if (modelId === 0 || modelId === '0') modelId = null;
 
-            // Если не нашли через стадию, пробуем получить детальную информацию о задаче
-            if (!projectName && task.id) {
-                try {
-                    const detailUrl = `https://inteko.aspro.cloud/api/v1/module/task/tasks/get/${task.id}?api_key=${apiKey}&customfields=1`;
-                    const detailRes = await fetch(detailUrl);
-                    if (detailRes.ok) {
-                        const detailData = await detailRes.json();
-                        const detail = detailData.response || {};
-                        // Ищем project_id в полях задачи
-                        if (detail.project_id && projectsMap[detail.project_id]) {
-                            projectName = projectsMap[detail.project_id];
-                            projectId = detail.project_id;
-                        }
-                        // Ищем в extra_fields
-                        if (!projectName && detail.extra_fields) {
-                            try {
-                                const ef = typeof detail.extra_fields === 'string'
-                                    ? JSON.parse(detail.extra_fields) : detail.extra_fields;
-                                if (ef.project_id && projectsMap[ef.project_id]) {
-                                    projectName = projectsMap[ef.project_id];
-                                    projectId = ef.project_id;
-                                }
-                                if (ef.model_id) modelId = ef.model_id;
-                            } catch (_) {}
-                        }
-                        // Ищем через ref
-                        if (!projectName && detail.ref === 'project' && detail.ref_id && projectsMap[detail.ref_id]) {
-                            projectName = projectsMap[detail.ref_id];
-                            projectId = detail.ref_id;
-                        }
-                    }
-                } catch (_) {}
-            }
+            console.log(`[aspro-tasks] Задача #${task.id}: model_id=${task.model_id}, resolved=${modelId}`);
+            const projectName = modelId && projectsMap[modelId] ? projectsMap[modelId] : '';
+            return { ...task, _project_name: projectName, _model_id: modelId };
+        });
 
-            enriched.push({
-                ...task,
-                _project_name: projectName,
-                _project_id: projectId,
-                _model_id: modelId,
-                _stage_name: stageName
-            });
-        }
-
-        console.log(`[aspro-tasks] Отправляем ${enriched.length} обогащённых задач`);
+        console.log(`[aspro-tasks] Отправляем ${enriched.length} задач`);
         res.json({ items: enriched, total: enriched.length, rawTotal: total });
     } catch (error) {
         console.error('Ошибка при получении задач:', error);

@@ -441,8 +441,8 @@ async function fillPlinthBlockSV005(worksheet, startRow, blockType, plinthData, 
     }
 }
 
-// ---------- ЗАПОЛНЕНИЕ БЛОКА SV004 ----------
-async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel) {
+// ---------- ЗАПОЛНЕНИЕ БЛОКА SV004 (с поддержкой ОПС) ----------
+async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel, isLast = false) {
     const groups = [
         { offsetDev: 14, offsetRoom: 15, pins: [0,1,2,3] }
     ];
@@ -485,15 +485,30 @@ async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel
             const pin = group.pins[i];
             const colDevice = ['B','F','J','N'][i];
             const colCable = ['D','H','L','P'][i];
-            const device = tm[pin] || '';
-            const cable = cm[pin] || '';
+            let device = tm[pin] || '';
+            let cable = cm[pin] || '';
             let room = (rm[pin] && rm[pin].trim()) ? rm[pin] : '';
+			console.log(`[ОПС] Пин ${pin}, устройство: "${device}", contains ОПС? ${device && device.includes('ОПС')}`);
 
-            if (!device) {
-                room = 'Резерв';
+            // Принудительная установка ОПС на последнем пине последнего плинта
+            if (isLast && pin === 3) {
+                device = 'ОПС (1)';
+                cable = '';
+                room = '';
             }
 
-            worksheet.getCell(`${colDevice}${devRow}`).value = device;
+            const devCell = worksheet.getCell(`${colDevice}${devRow}`);
+            devCell.value = device;
+            // Заливка красным для ОПС (только для устройства ОПС)
+			if (device && device.includes('ОПС')) {
+				devCell.fill = {
+				type: 'pattern',
+				pattern: 'solid',
+				fgColor: { argb: 'FFFF0000' }
+			};
+			console.log(`[ОПС] Заливка установлена для ячейки ${colDevice}${devRow} со значением "${device}"`);
+}
+
             worksheet.getCell(`${colCable}${devRow}`).value = cable;
 
             if (room === 'Резерв') {
@@ -654,13 +669,11 @@ function createCommonCheatSheetSV004(workbook) {
     if (!commonSheet) {
         commonSheet = workbook.addWorksheet(commonSheetName);
     } else {
-        // Очищаем все строки, кроме заголовка (строки 1-2)
         if (commonSheet.rowCount >= 2) {
             commonSheet.spliceRows(2, commonSheet.rowCount - 1);
         }
     }
 
-    // Копируем заголовок (строка 2) из первой шпоргалки
     const firstCheat = workbook.getWorksheet('шпоргалка-1');
     if (firstCheat) {
         const srcRow = firstCheat.getRow(2);
@@ -672,14 +685,11 @@ function createCommonCheatSheetSV004(workbook) {
         dstRow.height = srcRow.height;
     }
 
-    let targetRowIndex = 4; // Данные начинаются с 4-й строки
-
-    // Последовательно копируем данные из шпоргалка-1, -2, -3
+    let targetRowIndex = 4;
     for (let i = 1; i <= 3; i++) {
         const cheatName = `шпоргалка-${i}`;
         const cheatSheet = workbook.getWorksheet(cheatName);
         if (!cheatSheet) continue;
-
         const lastRow = cheatSheet.rowCount;
         for (let r = 4; r <= lastRow; r++) {
             const srcRow = cheatSheet.getRow(r);
@@ -690,7 +700,6 @@ function createCommonCheatSheetSV004(workbook) {
                 }
             });
             if (!hasData) continue;
-
             const dstRow = commonSheet.getRow(targetRowIndex);
             srcRow.eachCell((cell, colNumber) => {
                 dstRow.getCell(colNumber).value = cell.value;
@@ -1021,7 +1030,6 @@ app.post('/generate-sv005', async (req, res) => {
             worksheet.spliceRows(block.startRow, rowCount);
         }
 
-        // Удаляем строки после последнего использованного блока
         const lastUsedEndRow = Math.max(
             ...usedInputBlocks.map(b => b.endRow),
             ...usedOutputBlocks.map(b => b.endRow)
@@ -1041,7 +1049,7 @@ app.post('/generate-sv005', async (req, res) => {
         const buffer = await workbook.xlsx.writeBuffer();
 
         const addressPart = extractAddressPart(address);
-        const safeAddress = addressPart.replace(/[\/\\:*?"<>|]/g, '_');
+        const safeAddress = addressPart.replace(/[\\/:*?"<>|]/g, '_');
         const dateStr = new Date().toISOString().slice(0, 10);
         const filename = `${safeAddress}_${dateStr}_SV005.xlsx`;
 
@@ -1121,6 +1129,9 @@ app.post('/generate-sv004', async (req, res) => {
         const usedInputBlocks = inputBlocks.slice(0, neededPairs);
         const usedOutputBlocks = outputBlocks.slice(0, neededPairs);
 
+        let plinthCounter = 1;
+        const totalPlinths = boards.length * 2;
+
         for (let i = 0; i < boards.length; i++) {
             const board = boards[i];
             const boardNumber = i + 1;
@@ -1138,8 +1149,10 @@ app.post('/generate-sv004', async (req, res) => {
                     cableMap: board.plinth1.cableMap,
                     roomMap: board.plinth1.roomMap || {}
                 },
-                globalModel
+                globalModel,
+                plinthCounter === totalPlinths   // isLast
             );
+            plinthCounter++;
 
             await fillPlinthBlockSV004(
                 worksheet,
@@ -1154,8 +1167,10 @@ app.post('/generate-sv004', async (req, res) => {
                     cableMap: board.plinth2.cableMap,
                     roomMap: board.plinth2.roomMap || {}
                 },
-                globalModel
+                globalModel,
+                plinthCounter === totalPlinths   // isLast
             );
+            plinthCounter++;
         }
         addLog(`[SV004] Данные плат заполнены`);
 
@@ -1169,7 +1184,6 @@ app.post('/generate-sv004', async (req, res) => {
             worksheet.spliceRows(block.startRow, rowCount);
         }
 
-        // Удаляем строки после последнего использованного блока
         const lastUsedEndRow = Math.max(
             ...usedInputBlocks.map(b => b.endRow),
             ...usedOutputBlocks.map(b => b.endRow)
@@ -1184,7 +1198,6 @@ app.post('/generate-sv004', async (req, res) => {
         fillSheetsSV004(workbook, boards, globalModel);
         addLog(`[SV004] Шпоргалки/Disp заполнены`);
 
-        // Создаём общую шпоргалку
         createCommonCheatSheetSV004(workbook);
 
         applyAutoFit(workbook);
@@ -1527,7 +1540,6 @@ app.post('/api/projects/add-file', upload.single('file'), async (req, res) => {
             console.log(`[БД] INSERT manual file: name="${name}", file="${file_name}"`);
             return res.json({ success: true, id: pendingId });
         }
-        // Папки нет — запрашиваем подтверждение
         const pendingId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
         pendingFileUploads.set(pendingId, { name, file_name, tempPath, networkFolder, safeName });
         setTimeout(() => { pendingFileUploads.delete(pendingId); }, 120000);
@@ -1565,7 +1577,6 @@ app.post('/api/projects/add-file-confirm', async (req, res) => {
             console.log(`[БД] INSERT manual file: name="${name}", file="${file_name}"`);
             return res.json({ success: true, id: tempId });
         }
-        // Отказ — сохраняем в uploads
         try { fs.unlinkSync(tempPath); } catch (_) {}
         console.log(`[add-file] пользователь отказался, файл удалён: ${tempPath}`);
         res.json({ success: false, message: 'Файл не добавлен' });
@@ -1901,7 +1912,6 @@ app.get('/api/aspro/tasks', async (req, res) => {
             if (page > 500) break;
         }
 
-        // Фильтрация
         let filtered = allItems.filter(t => {
             if (Number(t.archive_status) !== 0) return false;
             const haystack = JSON.stringify(t).toLowerCase();
@@ -1914,7 +1924,6 @@ app.get('/api/aspro/tasks', async (req, res) => {
             filtered = filtered.filter(t => statusArr.includes(String(t.status)));
         }
 
-        // Загружаем проекты
         let projectsMap = {};
         try {
             const projUrl = `https://inteko.aspro.cloud/api/v1/module/st/projects/list?api_key=${apiKey}&per_page=500`;
