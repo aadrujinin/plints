@@ -845,6 +845,10 @@
             </select>
         </div>
         <div class="field">
+            <label>№ контроллера</label>
+            <input type="number" id="controllerNumber" value="1" min="1" style="width:70px;">
+        </div>
+        <div class="field">
             <label>Стойка ХК</label>
             <input type="text" id="globalRack" value="ХК" style="width:100px;">
         </div>
@@ -950,10 +954,10 @@
             <div class="filter-panel" style="margin-bottom:10px;flex-wrap:wrap;gap:6px;">
                 <span style="font-weight:600;margin-right:4px;">Этапы:</span>
                 <label class="stage-label"><input type="checkbox" class="stage-filter" value="1" checked> Сделать</label>
-                <label class="stage-label"><input type="checkbox" class="stage-filter" value="2" checked> В работе</label>
-                <label class="stage-label"><input type="checkbox" class="stage-filter" value="3" checked> Проблема</label>
-                <label class="stage-label"><input type="checkbox" class="stage-filter" value="4" checked> Сделано</label>
-                <label class="stage-label"><input type="checkbox" class="stage-filter" value="5" checked> Завершено</label>
+                <label class="stage-label"><input type="checkbox" class="stage-filter" value="2" unchecked> В работе</label>
+                <label class="stage-label"><input type="checkbox" class="stage-filter" value="3" unchecked> Проблема</label>
+                <label class="stage-label"><input type="checkbox" class="stage-filter" value="4" unchecked> Сделано</label>
+                <label class="stage-label"><input type="checkbox" class="stage-filter" value="5" unchecked> Завершено</label>
                 <button type="button" id="refreshTasksBtn" class="btn-secondary" style="margin-left:4px;">🔄 Обновить</button>
             </div>
             <div id="tasksProgress" style="display:none;margin-bottom:8px;">
@@ -1371,6 +1375,7 @@
     function collectData() {
         const address = document.getElementById('address').value.trim();
         const globalModel = document.getElementById('globalModelSelect').value;
+        const controllerNumber = (document.getElementById('controllerNumber').value || '1').trim();
         const globalRack = document.getElementById('globalRack').value.trim() || 'ХК';
         const boards = [];
         const boardDivs = document.querySelectorAll('.board-card');
@@ -1533,7 +1538,7 @@
                 });
             }
         }
-        return { address, globalModel, boards };
+        return { address, globalModel, controllerNumber, boards };
     }
 
     // ---------- Валидация (для SV005) ----------

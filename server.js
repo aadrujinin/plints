@@ -329,7 +329,7 @@ async function fillPlinthBlockSV005(worksheet, startRow, blockType, plinthData, 
     if (controllerText.includes('SV 777')) {
         controllerCell.value = controllerText.replace('SV 777', globalModel);
     }
-    worksheet.getCell(`N${rowController}`).value = `ХК ${rackClean}.1`;
+    worksheet.getCell(`N${rowController}`).value = `ХК ${rackClean}.${plinthData.controllerNumber || 1}`;
 
     worksheet.getCell(`N${rowBoard}`).value = plinthData.boardNumber;
 
@@ -457,7 +457,7 @@ async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel
     if (controllerText.includes('SV 777')) {
         controllerCell.value = controllerText.replace('SV 777', globalModel);
     }
-    const controllerVal = `ХК ${rackClean}.1`;
+    const controllerVal = `ХК ${rackClean}.${plinthData.controllerNumber || 1}`;
     worksheet.getCell(`N${controllerRow}`).value = controllerVal;
     worksheet.getCell(`O${controllerRow}`).value = controllerVal;
 
@@ -499,17 +499,9 @@ async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel
 
             const devCell = worksheet.getCell(`${colDevice}${devRow}`);
             devCell.value = device;
-            // Заливка красным для ОПС (только для устройства ОПС)
-			if (device && device.includes('ОПС')) {
-				devCell.fill = {
-				type: 'pattern',
-				pattern: 'solid',
-				fgColor: { argb: 'FFFF0000' }
-			};
-			console.log(`[ОПС] Заливка установлена для ячейки ${colDevice}${devRow} со значением "${device}"`);
-}
 
-            worksheet.getCell(`${colCable}${devRow}`).value = cable;
+            const cableCell = worksheet.getCell(`${colCable}${devRow}`);
+            cableCell.value = cable;
 
             if (room === 'Резерв') {
                 worksheet.getCell(`${colDevice}${roomRow}`).value = 'Резерв';
@@ -520,6 +512,15 @@ async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel
             } else {
                 worksheet.getCell(`${colDevice}${roomRow}`).value = '';
                 worksheet.getCell(`${colCable}${roomRow}`).value = '';
+            }
+
+            // Заливка красным 4 ячеек для ОПС
+            if (device && device.includes('ОПС')) {
+                devCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF0000' } };
+                cableCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF0000' } };
+                worksheet.getCell(`${colDevice}${roomRow}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF0000' } };
+                worksheet.getCell(`${colCable}${roomRow}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF0000' } };
+                console.log(`[ОПС] Красная заливка 4 ячеек пина ${pin}: ${colDevice}${devRow}, ${colCable}${devRow}, ${colDevice}${roomRow}, ${colCable}${roomRow}`);
             }
         }
     }
@@ -912,8 +913,8 @@ function saveFileToNetwork(buffer, fileName, projectName) {
 // ---------- МАРШРУТЫ ГЕНЕРАЦИИ ----------
 app.post('/generate-sv005', async (req, res) => {
     try {
-        const { address, globalModel, boards } = req.body;
-        addLog(`[SV005] Генерация: адрес="${address}", плат=${boards?.length || 0}`);
+        const { address, globalModel, controllerNumber, boards } = req.body;
+        addLog(`[SV005] Генерация: адрес="${address}", контроллер №${controllerNumber}, плат=${boards?.length || 0}`);
         if (!address || !boards || !boards.length) {
             return res.status(400).json({ error: 'Не указан адрес или список плат' });
         }
@@ -983,6 +984,7 @@ app.post('/generate-sv005', async (req, res) => {
 
             const plinth1Data = {
                 rack: board.rack,
+                controllerNumber: controllerNumber || 1,
                 boardNumber: boardNumber,
                 plinthNumber: board.plinth1.number,
                 skud: board.skud1,
@@ -1001,6 +1003,7 @@ app.post('/generate-sv005', async (req, res) => {
 
             const plinth2Data = {
                 rack: board.rack,
+                controllerNumber: controllerNumber || 1,
                 boardNumber: boardNumber,
                 plinthNumber: board.plinth2.number,
                 skud: board.skud2,
@@ -1068,14 +1071,14 @@ app.post('/generate-sv005', async (req, res) => {
 
 app.post('/generate-sv004', async (req, res) => {
     try {
-        const { address, globalModel, boards } = req.body;
+        const { address, globalModel, controllerNumber, boards } = req.body;
         if (!address || !boards || !boards.length) {
             return res.status(400).json({ error: 'Не указан адрес или список плат' });
         }
         if (!fs.existsSync(TEMPLATE_SV004)) {
             return res.status(500).json({ error: 'Файл шаблона SV004 не найден.' });
         }
-        addLog(`[SV004] Генерация: адрес="${address}", плат=${boards.length}`);
+        addLog(`[SV004] Генерация: адрес="${address}", контроллер №${controllerNumber}, плат=${boards.length}`);
 
         const workbook = new ExcelJS.Workbook();
         await workbook.xlsx.readFile(TEMPLATE_SV004);
@@ -1141,6 +1144,7 @@ app.post('/generate-sv004', async (req, res) => {
                 usedInputBlocks[i].startRow,
                 {
                     rack: board.rack,
+                    controllerNumber: controllerNumber || 1,
                     boardNumber: boardNumber,
                     plinthNumber: board.plinth1.number,
                     skud: board.skud1,
@@ -1159,6 +1163,7 @@ app.post('/generate-sv004', async (req, res) => {
                 usedOutputBlocks[i].startRow,
                 {
                     rack: board.rack,
+                    controllerNumber: controllerNumber || 1,
                     boardNumber: boardNumber,
                     plinthNumber: board.plinth2.number,
                     skud: board.skud2,
