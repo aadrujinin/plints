@@ -497,6 +497,11 @@ async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel
                 room = '';
             }
 
+            // Если на пине нет устройства — помещение = Резерв
+            if (!device) {
+                room = 'Резерв';
+            }
+
             const devCell = worksheet.getCell(`${colDevice}${devRow}`);
             devCell.value = device;
 
@@ -514,14 +519,6 @@ async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel
                 worksheet.getCell(`${colCable}${roomRow}`).value = '';
             }
 
-            // Заливка красным 4 ячеек для ОПС
-            if (device && device.includes('ОПС')) {
-                devCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF0000' } };
-                cableCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF0000' } };
-                worksheet.getCell(`${colDevice}${roomRow}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF0000' } };
-                worksheet.getCell(`${colCable}${roomRow}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF0000' } };
-                console.log(`[ОПС] Красная заливка 4 ячеек пина ${pin}: ${colDevice}${devRow}, ${colCable}${devRow}, ${colDevice}${roomRow}, ${colCable}${roomRow}`);
-            }
         }
     }
 }
