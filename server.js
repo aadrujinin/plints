@@ -1211,6 +1211,11 @@ app.post('/generate-sv004', async (req, res) => {
         applyAutoFit(workbook);
         addLog(`[SV004] Автоподгон ширины завершён`);
 
+        if (req.body.rs485Enabled === false) {
+            worksheet.spliceColumns(23, 20);
+            addLog(`[SV004] RS-485 отключён, колонки W:AP удалены`);
+        }
+
         const buffer = await workbook.xlsx.writeBuffer();
 
         const addressPart = extractAddressPart(address);

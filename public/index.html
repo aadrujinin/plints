@@ -892,6 +892,10 @@
                 <option value="SV004">SV004</option>
             </select>
         </div>
+        <div id="rs485Field" class="field" style="display:none; flex-direction:row; align-items:center; gap:6px;">
+            <input type="checkbox" id="rs485Enabled" checked style="width:16px;height:16px;cursor:pointer;">
+            <label for="rs485Enabled" style="font-weight:600;font-size:0.7rem;text-transform:uppercase;cursor:pointer;">RS-485</label>
+        </div>
         <div class="field">
             <label>Кол-во плат</label>
             <input type="number" id="numBoards" value="1" min="1" style="width:70px;">
@@ -1586,7 +1590,8 @@
                 });
             }
         }
-        return { address, globalModel, controllerNumber, boards };
+        const rs485Enabled = document.getElementById('rs485Enabled').checked;
+        return { address, globalModel, controllerNumber, rs485Enabled, boards };
     }
 
     // ---------- Валидация (для SV005) ----------
@@ -2240,6 +2245,11 @@
         const newBoard = createBoard(container.children.length, null, true, boardType);
         container.appendChild(newBoard);
         renumberBoards();
+    });
+
+    document.getElementById('boardType').addEventListener('change', function() {
+        const rs485Field = document.getElementById('rs485Field');
+        rs485Field.style.display = this.value === 'SV004' ? '' : 'none';
     });
 
     document.getElementById('createMultipleBtn').addEventListener('click', () => {
