@@ -32,8 +32,12 @@ const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, UPLOADS_DIR),
     filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const decodedName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-        cb(null, uniqueSuffix + '-' + decodedName);
+        var name = file.originalname || '';
+        if (/[\u0080-\u00FF]/.test(name)) {
+            try { name = Buffer.from(name, 'latin1').toString('utf8'); } catch (e) {}
+        }
+        name = name.replace(/[\\/:*?"<>|]/g, '_');
+        cb(null, uniqueSuffix + '-' + name);
     }
 });
 const upload = multer({ storage });
@@ -892,9 +896,9 @@ function saveFileToNetwork(buffer, fileName, projectName) {
     const safeProjectName = projectName.replace(/[\\/:*?"<>|]/g, '_');
     const projectFolder = path.join(
         basePath,
-        '1.Техническая документация',
-        '1.2.Проект',
-        '1.2.3.Расшивки',
+        'Расшивки',
+/*         '1.2.Проект',
+        '1.2.3.Расшивки', */
         safeProjectName
     );
     const fullPath = path.join(projectFolder, fileName);
@@ -1516,7 +1520,10 @@ app.post('/api/projects/add-file', upload.single('file'), async (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'Файл не выбран' });
     }
-    const file_name = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
+    var file_name = req.file.originalname || '';
+    if (/[\u0080-\u00FF]/.test(file_name)) {
+        try { file_name = Buffer.from(file_name, 'latin1').toString('utf8'); } catch (e) {}
+    }
     const tempPath = req.file.path;
 
     try {
@@ -1607,8 +1614,11 @@ app.post('/api/import-xlsx', upload.single('file'), async (req, res) => {
 
         const result = { type: isSV004 ? 'SV004' : 'SV005', address: '', rack: '', boards: [] };
 
-        const origName = req.file.originalname || '';
-        const addrMatch = origName.match(/^(.+?)_(20\d{2})/);
+        // Используем имя сохранённого файла — в нём кодировка уже исправлена
+        var storedName = req.file.filename || '';
+        var secondDash = storedName.indexOf('-', storedName.indexOf('-') + 1);
+        var origName = secondDash !== -1 ? storedName.substring(secondDash + 1) : storedName;
+        var addrMatch = origName.match(/^(.+?)_(20\d{2})/);
         if (addrMatch) result.address = addrMatch[1].replace(/_/g, ' ').trim();
 
         if (isSV005) {
@@ -1960,6 +1970,12 @@ app.get('/api/aspro/tasks', async (req, res) => {
         console.error('Ошибка при получении задач:', error);
         res.status(500).json({ error: error.message });
     }
+});
+
+// ---------- ВЕРСИЯ ----------
+const pkg = require('./package.json');
+app.get('/api/version', (req, res) => {
+    res.json({ version: pkg.version });
 });
 
 // ---------- ЗАПУСК ----------

@@ -1,6 +1,6 @@
 {
   "name": "access-control-service",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Generate Excel wiring schedules for access control systems",
   "main": "server.js",
   "scripts": {

@@ -850,6 +850,7 @@
 <div class="container">
     <div style="display:flex; align-items:center; gap:16px; margin-bottom:10px; border-bottom:2px solid #bdd4e7; padding-bottom:8px;">
         <h1 style="margin:0; padding:0; border:none;">🔌 Редактор плат SV005 / SV004 (ручное назначение)</h1>
+        <span id="versionBadge" style="font-size:0.7rem; color:#4b5563; background:#e5e7eb; padding:1px 10px; border-radius:20px; white-space:nowrap;"></span>
         <span id="logStatus" style="font-size:0.75rem; color:#4b5563; background:#f3f4f6; padding:2px 12px; border-radius:30px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:400px;"></span>
     </div>
 
@@ -2658,6 +2659,11 @@
             mo.observe(bc, { childList: true, subtree: true });
         }
     })();
+
+    // ---------- Версия ----------
+    fetch('/api/version').then(function(r) { return r.json(); }).then(function(d) {
+        document.getElementById('versionBadge').textContent = 'v' + d.version;
+    }).catch(function() {});
 </script>
 </body>
 </html>
