@@ -339,7 +339,8 @@ async function fillPlinthBlockSV005(worksheet, startRow, blockType, plinthData, 
 
     const absNum = plinthData.plinthNumber;
     const group = Math.floor((absNum - 1) / 15) + 1;
-    const holderValue = `ХВ-${rackClean}.${group}`;
+    const ctrl = plinthData.controllerNumber || 1;
+    const holderValue = `ХВ-${rackClean}.${ctrl}.${group}`;
     worksheet.getCell(`N${rowHolder}`).value = holderValue;
     if (blockType === 'output') {
         worksheet.getCell(`O${rowHolder}`).value = holderValue;
@@ -471,7 +472,8 @@ async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel
     const holderRow = startRow + 3;
     const absNum = plinthData.plinthNumber;
     const group = Math.floor((absNum - 1) / 15) + 1;
-    const holderValue = `ХВ-${rackClean}.${group}`;
+    const ctrl = plinthData.controllerNumber || 1;
+    const holderValue = `ХВ-${rackClean}.${ctrl}.${group}`;
     worksheet.getCell(`N${holderRow}`).value = holderValue;
 
     const plinthNumRow = startRow + 4;
@@ -985,7 +987,7 @@ app.post('/generate-sv005', async (req, res) => {
 
             const plinth1Data = {
                 rack: board.rack,
-                controllerNumber: controllerNumber || 1,
+                controllerNumber: board.controllerNumber || controllerNumber || 1,
                 boardNumber: boardNumber,
                 plinthNumber: board.plinth1.number,
                 skud: board.skud1,
@@ -1004,7 +1006,7 @@ app.post('/generate-sv005', async (req, res) => {
 
             const plinth2Data = {
                 rack: board.rack,
-                controllerNumber: controllerNumber || 1,
+                controllerNumber: board.controllerNumber || controllerNumber || 1,
                 boardNumber: boardNumber,
                 plinthNumber: board.plinth2.number,
                 skud: board.skud2,
@@ -1145,7 +1147,7 @@ app.post('/generate-sv004', async (req, res) => {
                 usedInputBlocks[i].startRow,
                 {
                     rack: board.rack,
-                    controllerNumber: controllerNumber || 1,
+                    controllerNumber: board.controllerNumber || controllerNumber || 1,
                     boardNumber: boardNumber,
                     plinthNumber: board.plinth1.number,
                     skud: board.skud1,
@@ -1164,7 +1166,7 @@ app.post('/generate-sv004', async (req, res) => {
                 usedOutputBlocks[i].startRow,
                 {
                     rack: board.rack,
-                    controllerNumber: controllerNumber || 1,
+                    controllerNumber: board.controllerNumber || controllerNumber || 1,
                     boardNumber: boardNumber,
                     plinthNumber: board.plinth2.number,
                     skud: board.skud2,
@@ -1630,6 +1632,10 @@ app.post('/api/import-xlsx', upload.single('file'), async (req, res) => {
                 const startRow = inputBlock.startRow;
                 const rackClean = String(mainSheet.getCell(`N${startRow}`).value ?? '');
                 if (!result.rack) result.rack = rackClean;
+                // Номер контроллера из строки «Контроллер»: ХК 1.1.1 → последний сегмент
+                const ctrlRaw = String(mainSheet.getCell(`N${startRow + 1}`).value ?? '');
+                const ctrlMatch = ctrlRaw.match(/(\d+)$/);
+                const importCtrl = ctrlMatch ? parseInt(ctrlMatch[1], 10) : 1;
                 const boardNum = parseInt(mainSheet.getCell(`N${startRow + 2}`).value) || (bi / 2 + 1);
                 const plinth1Num = parseInt(mainSheet.getCell(`N${startRow + 4}`).value) || 0;
                 const plinth2Num = outputBlock ? (parseInt(mainSheet.getCell(`N${outputBlock.startRow + 4}`).value) || 0) : 0;
@@ -1684,6 +1690,7 @@ app.post('/api/import-xlsx', upload.single('file'), async (req, res) => {
                 const p2 = outputBlock ? parsePlinth(outputBlock) : { terminalMap: {}, cableNumbers: {}, room: '' };
                 result.boards.push({
                     type: 'SV005', rack: `ХК ${rackClean}`,
+                    controllerNumber: importCtrl,
                     skud1, skud2,
                     plinth1: { number: plinth1Num, room: p1.room, terminalMap: p1.terminalMap, cableNumbers: p1.cableNumbers, cableMap: {}, roomMap: {}, device1Map: {}, device2Map: {}, count1Map: {}, count2Map: {} },
                     plinth2: { number: plinth2Num, room: p2.room, terminalMap: p2.terminalMap, cableNumbers: p2.cableNumbers, cableMap: {}, roomMap: {}, device1Map: {}, device2Map: {}, count1Map: {}, count2Map: {} }
@@ -1698,6 +1705,9 @@ app.post('/api/import-xlsx', upload.single('file'), async (req, res) => {
                 const startRow = inputBlock.startRow;
                 const rackClean = String(mainSheet.getCell(`N${startRow}`).value ?? '');
                 if (!result.rack) result.rack = rackClean;
+                const ctrlRaw = String(mainSheet.getCell(`N${startRow + 1}`).value ?? '');
+                const ctrlMatch = ctrlRaw.match(/(\d+)$/);
+                const importCtrl = ctrlMatch ? parseInt(ctrlMatch[1], 10) : 1;
                 const boardNum = parseInt(mainSheet.getCell(`N${startRow + 2}`).value) || (bi / 2 + 1);
                 const plinth1Num = parseInt(mainSheet.getCell(`N${startRow + 4}`).value) || 0;
                 const plinth2Num = outputBlock ? (parseInt(mainSheet.getCell(`N${outputBlock.startRow + 4}`).value) || 0) : 0;
@@ -1740,6 +1750,7 @@ app.post('/api/import-xlsx', upload.single('file'), async (req, res) => {
                 const p2 = outputBlock ? parsePlinthSV004(outputBlock) : { terminalMap: {}, cableMap: {}, roomMap: {}, device1Map: {}, device2Map: {}, count1Map: {}, count2Map: {} };
                 result.boards.push({
                     type: 'SV004', rack: `ХК ${rackClean}`,
+                    controllerNumber: importCtrl,
                     skud1, skud2,
                     plinth1: { number: plinth1Num, room: '', terminalMap: p1.terminalMap, cableNumbers: {}, cableMap: p1.cableMap, roomMap: p1.roomMap, device1Map: p1.device1Map, device2Map: p1.device2Map, count1Map: p1.count1Map, count2Map: p1.count2Map },
                     plinth2: { number: plinth2Num, room: '', terminalMap: p2.terminalMap, cableNumbers: {}, cableMap: p2.cableMap, roomMap: p2.roomMap, device1Map: p2.device1Map, device2Map: p2.device2Map, count1Map: p2.count1Map, count2Map: p2.count2Map }

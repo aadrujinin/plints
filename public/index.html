@@ -1063,13 +1063,13 @@
     }
 
     // ---------- Вспомогательные функции ----------
-    function buildHolder(rack, plinthNumber) {
+    function buildHolder(rack, plinthNumber, controllerNumber) {
         const rackClean = rack.replace(/^ХК\s*/i, '');
         if (!rackClean) return '';
         const absNum = parseInt(plinthNumber, 10);
         const group = Math.floor((absNum - 1) / 15) + 1;
-        const local = ((absNum - 1) % 15) + 1;
-        return `ХВ-${rackClean}.${group}.${local}`;
+        const ctrl = controllerNumber || 1;
+        return `ХВ-${rackClean}.${ctrl}.${group}`;
     }
 
     function applyPreset(plinthDiv, presetKey) {
@@ -1221,12 +1221,18 @@
     }
 
     // ---------- Пересчёт номеров плинтов ----------
-    function renumberBoards() {
+    function renumberBoards(preserveDatasets) {
         const boardDivs = document.querySelectorAll('.board-card');
         const globalRack = document.getElementById('globalRack').value.trim() || 'ХК';
+        const globalCtrl = parseInt(document.getElementById('controllerNumber').value, 10) || 1;
         let nextPlinthNumber = 1;
         boardDivs.forEach((board, idx) => {
             board.dataset.boardIndex = idx;
+            if (!preserveDatasets) {
+                board.dataset.boardRack = globalRack;
+            }
+            const boardRack = board.dataset.boardRack || globalRack;
+            const boardCtrl = parseInt(board.dataset.boardCtrl, 10) || globalCtrl;
             const boardNumber = idx + 1;
             const boardType = board.dataset.boardType || 'SV005';
             const headerSpan = board.querySelector('.board-header .header-left span');
@@ -1238,24 +1244,24 @@
             const plinth1Number = nextPlinthNumber++;
             const plinth1NumInput = plinth1Div.querySelector('.plinth-number');
             plinth1NumInput.value = plinth1Number;
-            updateHolderForPlinth(plinth1Div, globalRack, plinth1Number);
+            updateHolderForPlinth(plinth1Div, boardRack, plinth1Number, boardCtrl);
 
             if (plinths.length > 1) {
                 const plinth2Div = plinths[1];
                 const plinth2Number = nextPlinthNumber++;
                 const plinth2NumInput = plinth2Div.querySelector('.plinth-number');
                 plinth2NumInput.value = plinth2Number;
-                updateHolderForPlinth(plinth2Div, globalRack, plinth2Number);
+                updateHolderForPlinth(plinth2Div, boardRack, plinth2Number, boardCtrl);
             }
         });
 
         updateBoardCounters();
     }
 
-    function updateHolderForPlinth(plinthDiv, rack, plinthNumber) {
+    function updateHolderForPlinth(plinthDiv, rack, plinthNumber, controllerNumber) {
         const holderInput = plinthDiv.querySelector('.holder');
         if (holderInput) {
-            holderInput.value = buildHolder(rack, plinthNumber);
+            holderInput.value = buildHolder(rack, plinthNumber, controllerNumber);
         }
     }
 
@@ -1277,12 +1283,14 @@
     function createBoard(boardIndex, initialData = null, collapsed = true, boardType = 'SV005') {
         const boardNumber = boardIndex + 1;
         const defaultRack = document.getElementById('globalRack').value.trim() || 'ХК';
+        const defaultCtrl = parseInt(document.getElementById('controllerNumber').value, 10) || 1;
 
-        const defaultHolder1 = buildHolder(defaultRack, 0);
-        const defaultHolder2 = buildHolder(defaultRack, 0);
+        const defaultHolder1 = buildHolder(defaultRack, 0, defaultCtrl);
+        const defaultHolder2 = buildHolder(defaultRack, 0, defaultCtrl);
 
         let defaultData = {
             rack: defaultRack,
+            controllerNumber: defaultCtrl,
             skud1: "",
             skud2: "",
             plinth1: {
@@ -1314,6 +1322,7 @@
         };
 
         if (initialData) {
+            if (initialData.controllerNumber !== undefined) defaultData.controllerNumber = initialData.controllerNumber;
             if (initialData.skud1 !== undefined) defaultData.skud1 = initialData.skud1;
             if (initialData.skud2 !== undefined) defaultData.skud2 = initialData.skud2;
             if (initialData.plinth1) {
@@ -1344,6 +1353,8 @@
         boardDiv.className = 'board-card';
         boardDiv.dataset.boardIndex = boardIndex;
         boardDiv.dataset.boardType = boardType;
+        boardDiv.dataset.boardRack = defaultData.rack;
+        boardDiv.dataset.boardCtrl = defaultData.controllerNumber;
 
         const header = document.createElement('div');
         header.className = 'board-header';
@@ -1420,7 +1431,7 @@
                 const boardType = boardDiv.dataset.boardType || 'SV005';
                 const plinths = boardDiv.querySelectorAll('.plinth-card');
                 if (plinths.length === 0) {
-                    boards.push({ type: boardType, rack: globalRack, skud1: '', skud2: '', plinth1: { number: 0, room: '', terminalMap: {}, cableNumbers: {}, cableMap: {}, roomMap: {}, device1Map: {}, device2Map: {}, count1Map: {}, count2Map: {} }, plinth2: null });
+                    boards.push({ type: boardType, rack: globalRack, controllerNumber: parseInt(boardDiv.dataset.boardCtrl, 10) || parseInt(controllerNumber, 10) || 1, skud1: '', skud2: '', plinth1: { number: 0, room: '', terminalMap: {}, cableNumbers: {}, cableMap: {}, roomMap: {}, device1Map: {}, device2Map: {}, count1Map: {}, count2Map: {} }, plinth2: null });
                     continue;
                 }
                 const plinth1Div = plinths[0];
@@ -1535,6 +1546,7 @@
                 boards.push({
                     type: boardType,
                     rack: globalRack,
+                    controllerNumber: parseInt(boardDiv.dataset.boardCtrl, 10) || parseInt(controllerNumber, 10) || 1,
                     skud1: plinth1Skud,
                     skud2: (plinths.length > 1) ? plinth2Skud : '',
                     plinth1: {
@@ -1567,6 +1579,7 @@
                 boards.push({
                     type: boardDiv.dataset.boardType || 'SV005',
                     rack: globalRack,
+                    controllerNumber: parseInt(boardDiv.dataset.boardCtrl, 10) || parseInt(controllerNumber, 10) || 1,
                     skud1: '', skud2: '',
                     plinth1: { number: 0, room: '', terminalMap: {}, cableNumbers: {}, cableMap: {}, roomMap: {}, device1Map: {}, device2Map: {}, count1Map: {}, count2Map: {} },
                     plinth2: null
@@ -2275,7 +2288,7 @@
                 const boardEl = createBoard(i, boardData, true, boardData.type || data.type);
                 container.appendChild(boardEl);
             }
-            renumberBoards();
+            renumberBoards(true);
             showMessage(`✅ Импортировано ${data.boards.length} плат из ${file.name}`, 'success');
         } catch (err) {
             showMessage(`❌ ${err.message}`, 'error');
@@ -2489,6 +2502,11 @@
 
     // Глобальная стойка
     document.getElementById('globalRack').addEventListener('input', function() {
+        renumberBoards();
+    });
+
+    // Номер контроллера
+    document.getElementById('controllerNumber').addEventListener('input', function() {
         renumberBoards();
     });
 
