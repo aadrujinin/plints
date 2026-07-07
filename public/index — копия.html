@@ -390,12 +390,12 @@
         }
         .terminal .device-row .devices-col .dev-group select {
             flex: 1;
-            min-width: 40px;
+            min-width: 30px;
             font-size: 0.7rem;
             height: 18px;
         }
         .terminal .device-row .devices-col .dev-group input {
-            width: 40px;
+            width: 25px;
             flex-shrink: 0;
             height: 18px;
             font-size: 0.7rem;
@@ -404,7 +404,7 @@
             display: flex;
             flex-direction: column;
             gap: 2px;
-            flex: 0.5;
+            flex: 1;
             min-width: 0;
         }
         .terminal .device-row .cable-room-col input {
@@ -517,9 +517,9 @@
             min-width: 30px;
             width: 100%;
         }
-        .terminal input.count1,
-        .terminal input.count2 {
-            width: 60px;
+        .terminal .count1,
+        .terminal .count2 {
+            width: 30px;
         }
         .terminal .cable-pin,
         .terminal .room-pin {
@@ -550,8 +550,7 @@
             .terminal .device-row .devices-col .dev-group input {
                 height: 16px;
                 font-size: 0.45rem;
-                width: 30px;
-                flex-shrink: 0;
+                width: 22px;
             }
             .terminal .device-row .cable-room-col input {
                 height: 16px;
@@ -1014,11 +1013,11 @@
     // ----- Общие настройки -----
     const deviceOptionsSV005 = [
         { value: "", label: "не используется" },
-        { value: "reader", label: "Счит." },
-        { value: "lock", label: "Замок" },
+        { value: "reader", label: "📖 Счит." },
+        { value: "lock", label: "🔒 Замок" },
         { value: "fire_lock", label: "🔥 Замок пож." },
         { value: "contact", label: "🧲 Геркон" },
-        { value: "exit_btn", label: "Кн.Вых" },
+        { value: "exit_btn", label: "🚪 Кн.Вых" },
         { value: "siren", label: "🔊 Сирена" }
     ];
 
@@ -2555,20 +2554,6 @@
             return false;
         }
 
-        function setSelectBg(sel) {
-            var img = devImgs[sel.value];
-            if (img) {
-                sel.style.backgroundImage = 'url(' + img + ')';
-                sel.style.backgroundRepeat = 'no-repeat';
-                sel.style.backgroundPosition = '3px center';
-                sel.style.backgroundSize = '12px 12px';
-                sel.style.paddingLeft = '18px';
-            } else {
-                sel.style.backgroundImage = '';
-                sel.style.paddingLeft = '';
-            }
-        }
-
         function buildPanel(sel) {
             panel.innerHTML = '';
             var cs = window.getComputedStyle(sel);
@@ -2623,7 +2608,6 @@
                     ev.preventDefault();
                     ev.stopPropagation();
                     sel.value = this.dataset.value;
-                    setSelectBg(sel);
                     sel.dispatchEvent(new Event('change', { bubbles: true }));
                     panel.style.display = 'none';
                 });
@@ -2638,14 +2622,7 @@
 
         function markSelects(root) {
             root = root || document;
-            root.querySelectorAll('select').forEach(function(s) {
-                s._csDev = isDevSelect(s);
-                if (s._csDev && !s._csBgReady) {
-                    s._csBgReady = true;
-                    setSelectBg(s);
-                    s.addEventListener('change', function() { setSelectBg(this); });
-                }
-            });
+            root.querySelectorAll('select').forEach(function(s) { s._csDev = isDevSelect(s); });
         }
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', function() { markSelects(); });
