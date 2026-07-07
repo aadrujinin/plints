@@ -700,6 +700,37 @@
             background: #4b5563;
         }
 
+        /* Дропдаун с картинками (position:fixed, не влияет на вёрстку) */
+        #csDevicePanel {
+            position: fixed;
+            z-index: 100000;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: none;
+            max-height: 200px;
+            overflow-y: auto;
+            padding: 2px 0;
+        }
+        #csDevicePanel .cs-opt {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            white-space: nowrap;
+            padding: 2px 6px;
+        }
+        #csDevicePanel .cs-opt:hover {
+            background: #e5f0fe;
+        }
+        #csDevicePanel .cs-opt-img {
+            width: 14px;
+            height: 14px;
+            object-fit: contain;
+            flex-shrink: 0;
+        }
+
         .projects-stats {
             padding: 8px 12px;
             font-size: 0.85rem;
@@ -976,25 +1007,27 @@
     </div>
 </div>
 
+<div id="csDevicePanel"></div>
+
 <script>
     // ----- Общие настройки -----
     const deviceOptionsSV005 = [
         { value: "", label: "не используется" },
-        { value: "reader", label: "📖 Счит." },
-        { value: "lock", label: "🔒 Замок" },
+        { value: "reader", label: "Счит." },
+        { value: "lock", label: "Замок" },
         { value: "fire_lock", label: "🔥 Замок пож." },
         { value: "contact", label: "🧲 Геркон" },
-        { value: "exit_btn", label: "🚪 Кн.Вых" },
+        { value: "exit_btn", label: "Кн.Вых" },
         { value: "siren", label: "🔊 Сирена" }
     ];
 
     // Добавлена опция "ОПС" для SV004
     const deviceOptionsSV004 = [
         { value: "", label: "не используется" },
-        { value: "ИК", label: "📡 ИК" },
-        { value: "КАВ", label: "🚪 КАВ" },
-        { value: "СМК", label: "🧲 СМК" },
-        { value: "ДРС", label: "💥 ДРС" },
+        { value: "ИК", label: "ИК" },
+        { value: "КАВ", label: "КАВ" },
+        { value: "СМК", label: "СМК" },
+        { value: "ДРС", label: "ДРС" },
         { value: "ОПС", label: "🚨 ОПС" }
     ];
 
@@ -2499,6 +2532,109 @@
     } else {
         console.error('❌ Контейнер #boardsContainer не найден');
     }
+
+    // ---------- Дропдаун с картинками (position:fixed, без изменений вёрстки) ----------
+    (function() {
+        var devImgs = {
+            'lock': 'images/zamok.png',
+            'exit_btn': 'images/kn_vyhoda.png',
+            'СМК': 'images/smk.png',
+            'ДРС': 'images/drs.png',
+            'ИК': 'images/ik.png',
+            'КАВ': 'images/kav.png',
+			'reader': 'images/schit.png',
+        };
+        var panel = document.getElementById('csDevicePanel');
+        var activeSelect = null;
+
+        function isDevSelect(sel) {
+            for (var i = 0; i < sel.options.length; i++) {
+                if (sel.options[i].value && devImgs[sel.options[i].value]) return true;
+            }
+            return false;
+        }
+
+        function buildPanel(sel) {
+            panel.innerHTML = '';
+            var cs = window.getComputedStyle(sel);
+            for (var i = 0; i < sel.options.length; i++) {
+                var o = sel.options[i];
+                var div = document.createElement('div');
+                div.className = 'cs-opt';
+                div.dataset.value = o.value;
+                div.style.fontSize = cs.fontSize;
+                div.style.fontFamily = cs.fontFamily;
+                if (o.value === sel.value) div.style.background = '#e5f0fe';
+
+                var img = devImgs[o.value];
+                if (img) {
+                    var imgEl = document.createElement('img');
+                    imgEl.className = 'cs-opt-img';
+                    imgEl.src = img;
+                    imgEl.alt = '';
+                    div.appendChild(imgEl);
+                }
+
+                var txt = document.createElement('span');
+                txt.textContent = o.label;
+                div.appendChild(txt);
+                panel.appendChild(div);
+            }
+            panel.style.minWidth = sel.offsetWidth + 'px';
+            panel.style.fontSize = cs.fontSize;
+            panel.style.fontFamily = cs.fontFamily;
+        }
+
+        document.addEventListener('mousedown', function(e) {
+            var sel = e.target.closest('select');
+            if (!sel || !isDevSelect(sel)) {
+                panel.style.display = 'none';
+                return;
+            }
+            if (panel.style.display === 'block' && activeSelect === sel) {
+                panel.style.display = 'none';
+                return;
+            }
+            e.preventDefault();
+            activeSelect = sel;
+            buildPanel(sel);
+            var r = sel.getBoundingClientRect();
+            panel.style.top = r.bottom + 'px';
+            panel.style.left = r.left + 'px';
+            panel.style.display = 'block';
+
+            panel.querySelectorAll('.cs-opt').forEach(function(opt) {
+                opt.addEventListener('mousedown', function(ev) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    sel.value = this.dataset.value;
+                    sel.dispatchEvent(new Event('change', { bubbles: true }));
+                    panel.style.display = 'none';
+                });
+            });
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') panel.style.display = 'none';
+        });
+        document.addEventListener('scroll', function() { panel.style.display = 'none'; }, true);
+        window.addEventListener('resize', function() { panel.style.display = 'none'; });
+
+        function markSelects(root) {
+            root = root || document;
+            root.querySelectorAll('select').forEach(function(s) { s._csDev = isDevSelect(s); });
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() { markSelects(); });
+        } else {
+            markSelects();
+        }
+        var bc = document.getElementById('boardsContainer');
+        if (bc) {
+            var mo = new MutationObserver(function() { markSelects(bc); });
+            mo.observe(bc, { childList: true, subtree: true });
+        }
+    })();
 </script>
 </body>
 </html>

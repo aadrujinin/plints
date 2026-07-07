@@ -488,7 +488,7 @@ async function fillPlinthBlockSV004(worksheet, startRow, plinthData, globalModel
             let device = tm[pin] || '';
             let cable = cm[pin] || '';
             let room = (rm[pin] && rm[pin].trim()) ? rm[pin] : '';
-			console.log(`[ОПС] Пин ${pin}, устройство: "${device}", contains ОПС? ${device && device.includes('ОПС')}`);
+            console.log(`[ОПС] Пин ${pin}, устройство: "${device}", contains ОПС? ${device && device.includes('ОПС')}`);
 
             // Принудительная установка ОПС на последнем пине последнего плинта
             if (isLast && pin === 3) {
